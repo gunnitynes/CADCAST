@@ -53,12 +53,12 @@ The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
 </div>
 
 <figure class="shot"><img src="desk.png" alt="The teacher's desk: student tiles with live meters, one being listened to, one with a raised hand"></figure>
-<figcaption>The teacher’s desk. Every student has live meters; red = listening, amber = raised hand.</figcaption>
+<figcaption>The teacher’s desk. Students who broadcast show live meters; red = listening, amber = raised hand, 🔇 = muted by the student.</figcaption>
 
 <h2 id="how">How it works</h2>
 <div class="grid">
   <div class="card"><div class="n">01</div><h3>Open the desk</h3><p>Click CBACK in the Dock. Chrome opens the desk; project the link and QR code.</p></div>
-  <div class="card"><div class="n">02</div><h3>Students join</h3><p>They scan, type a name, press Join. Their DAW plays into BlackHole; the page sends BlackHole.</p></div>
+  <div class="card"><div class="n">02</div><h3>Students join</h3><p>They scan, type a name, press Join, and press <b>Start broadcast</b> when they want to be heard. They stay muted until then.</p></div>
   <div class="card"><div class="n">03</div><h3>Click to listen</h3><p>Click a tile to hear that student, ⇧‑click for several, 1–9 to jump, H for the next raised hand.</p></div>
 </div>
 
@@ -66,10 +66,11 @@ The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
 <div class="two">
   <div><ol class="steps">
     <li><b>Name + Join.</b> BlackHole 2ch is picked automatically when present.</li>
-    <li><b>Meters</b> show what’s being sent, and warn when there’s no signal or the wrong device is picked.</li>
+    <li><b>Start broadcast</b> is their mute button, off every time the page opens. Nothing leaves the laptop until they press it.</li>
+    <li><b>Meters</b> show the signal, and warn when there’s no signal or the wrong device is picked.</li>
     <li><b>✋ Ask teacher to listen</b> raises a hand on the desk.</li>
-    <li>A red <b>TEACHER LISTENING</b> light comes on while the teacher listens. Audio only leaves the laptop then; the rest of the time only a meter does.</li>
-    <li><b>Pause</b> takes them off the desk at any time.</li></ol></div>
+    <li>A red <b>TEACHER LISTENING</b> light comes on while they broadcast and the teacher listens. Audio only leaves the laptop then.</li>
+    <li><b>Stop broadcast</b> mutes them instantly.</li></ol></div>
   <img src="student.png" alt="Student page while the teacher is listening">
 </div>
 

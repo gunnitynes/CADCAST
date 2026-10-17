@@ -15,7 +15,8 @@ Stereo, 48 kHz Opus at 320 kb/s with no speech processing (CCAST's recipe), abou
    (it is picked for them when present).
    - First time only, Chrome says *"Your connection is not private"*: **Advanced → Proceed**. It's this
      Mac's own certificate, the same one CCAST's Ultra link uses, so anyone who accepted it there is not asked.
-4. Every student appears as a tile with **live meters**, so you can see who is sending signal before you listen.
+4. Every student appears as a tile, **muted (🔇) until they press Start broadcast**. Students broadcast only when they
+   want to be heard. While they broadcast, the tile shows **live meters**.
 
 On the desk:
 - **Click** a student to listen; click again to stop. **⇧-click** adds students to listen to several at once.
@@ -24,9 +25,11 @@ On the desk:
   Listening lowers it.
 - **Output** picker: listen on your interface's headphones while CCAST keeps playing elsewhere. **VOL** sets the level.
 
-The student sees a red **TEACHER LISTENING** light while you listen. Audio only leaves their machine while you
-listen; otherwise only the meter does, so 25 students on Wi‑Fi cost almost nothing.
-They can **Pause** (they disappear from your desk) at any time.
+**Start / Stop broadcast** is the student's mute button, and it is **off every time the page opens**. While it's off,
+nothing leaves their laptop, not even the meter, even if you click them (the tile says *Waiting for them to broadcast*;
+their page says *Teacher wants to hear you*). Raising a hand starts the broadcast.
+The student sees a red **TEACHER LISTENING** light only while they broadcast *and* you listen. Audio leaves their
+machine only then; otherwise at most a meter does, so 25 students on Wi‑Fi cost almost nothing.
 
 ## Student setup (BlackHole)
 Chrome captures **channels 1–2 of the device the student picks**, so the page should get BlackHole itself:

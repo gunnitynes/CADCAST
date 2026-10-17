@@ -214,7 +214,7 @@ body.compact .qr img,body.compact .qr canvas{width:84px;height:84px}body.compact
 .tile .st{margin:12px 0 0 26px;font-size:13px;color:var(--dim);font-weight:600;display:flex;align-items:center;gap:8px}
 .tile.on{background:#1d1015;border-color:var(--air);box-shadow:0 0 0 2px var(--air),0 0 30px rgba(255,45,85,.25)}
 .tile.on .st{color:#ff8fa5}
-.tile.gone{opacity:.4}
+.tile.gone{opacity:.4}.tile.muted .ms{opacity:.25}.tile.muted .nm{color:var(--dim)}
 .tile .clip{position:absolute;right:14px;bottom:14px;font-size:10px;font-weight:800;letter-spacing:.12em;color:var(--mute)}.tile .clip.on{color:var(--off)}
 .empty{grid-column:1/-1;text-align:center;padding:60px 20px;color:var(--mute);border:1px dashed var(--line);border-radius:18px}
 .foot{margin-top:18px;color:var(--mute);font-size:13px;display:flex;gap:22px;flex-wrap:wrap}.foot b{color:var(--dim)}
@@ -247,7 +247,7 @@ DESK_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CBACK · D
   <div class=qr id=qr></div>
 </div>
 <div class=tiles id=tiles></div>
-<div class=foot><span><b>Click</b> a student to listen</span><span><b>⇧-click</b> to add more</span><span><b>1–9</b> solo · <b>0</b>/<b>Esc</b> stop</span><span><b>H</b> next raised hand</span><span id=net></span></div>
+<div class=foot><span><b>Click</b> a student to listen</span><span><b>⇧-click</b> to add more</span><span><b>1–9</b> solo · <b>0</b>/<b>Esc</b> stop</span><span><b>H</b> next raised hand</span><span>🔇 = student not broadcasting</span><span id=net></span></div>
 <div class=err id=err></div>
 </div>
 <div class=cover id=stale><div><h2>This desk moved to a newer tab</h2><p class=hint>Close this one.</p></div></div>
@@ -264,15 +264,15 @@ function render(){const list=sorted();const box=$('#tiles');
   else{const have=new Set();list.forEach((s,i)=>{if(!s.el)makeTile(s);have.add(s.el);s.el.querySelector('.num').textContent=i<9?i+1:'';box.appendChild(s.el);paint(s);});
     [...box.children].forEach(c=>{if(!have.has(c))c.remove();});}
   const n=list.filter(s=>!s.gone).length;$('#count').textContent=n;$('#sdot').className='dot'+(n?' live':'');
-  const on=list.filter(s=>s.listening);$('#onair').classList.toggle('on',on.length>0);$('#onair').textContent=on.length?'LISTENING · '+(on.length>1?on.length+' students':on[0].name.toUpperCase()):'LISTENING';
+  const on=list.filter(s=>s.listening&&s.live&&!s.gone);$('#onair').classList.toggle('on',on.length>0);$('#onair').textContent=on.length?'LISTENING · '+(on.length>1?on.length+' students':on[0].name.toUpperCase()):'LISTENING';
   document.body.classList.toggle('compact',list.length>0&&!document.body.classList.contains('projector'));}
 function makeTile(s){const el=document.createElement('div');el.className='tile';
   el.innerHTML='<div class=top><span class=num></span><span class=nm></span><span class=hand>✋</span></div><div class=dev></div><div class=ms><div class=m><i></i><b></b></div><div class=m><i></i><b></b></div></div><div class=st></div><div class=clip>CLIP</div>';
   el.onclick=e=>{if(e.shiftKey||e.metaKey)toggle(s);else solo(s);};s.el=el;s.bars=el.querySelectorAll('.m');}
 function paint(s){const el=s.el;if(!el)return;el.querySelector('.nm').textContent=s.name;el.querySelector('.dev').textContent=s.dev||'';
-  el.classList.toggle('on',!!s.listening);el.classList.toggle('hand',!!s.hand&&!s.listening);el.classList.toggle('gone',!!s.gone);
-  const st=s.gone?'offline':s.state!=='connected'?'connecting…':s.listening?'🎧 Listening':s.hand?'Wants you to listen':'Click to listen';
-  el.querySelector('.st').innerHTML=(s.listening&&!s.gone?'<span class="dot air"></span>':'')+st;}
+  el.classList.toggle('on',!!s.listening);el.classList.toggle('hand',!!s.hand&&!s.listening);el.classList.toggle('gone',!!s.gone);el.classList.toggle('muted',!s.live&&!s.gone);
+  const st=s.gone?'offline':s.state!=='connected'?'connecting…':!s.live?(s.listening?'🔇 Waiting for them to broadcast':'🔇 Not broadcasting'):s.listening?'🎧 Listening':s.hand?'Wants you to listen':'Click to listen';
+  el.querySelector('.st').innerHTML=(s.listening&&s.live&&!s.gone?'<span class="dot air"></span>':'')+st;}
 
 // ---------- listening
 function setListen(s,on){s.listening=on;s.audio.muted=!on;if(on){s.hand=false;s.audio.play().catch(()=>{});}
@@ -288,7 +288,7 @@ function student(id){let s=students.get(id);if(!s){const audio=new Audio();audio
     s={id,name:'…',dev:'',hand:false,audio,levels:[-90,-90],peak:[-90,-90],clip:0,listening:false,gone:false,state:'new'};students.set(id,s);}
   return s;}
 function drop(s){if(s.pc)s.pc.close();s.pc=null;s.audio.srcObject=null;students.delete(s.id);if(s.el)s.el.remove();render();}
-async function onOffer(id,d){const s=student(id);Object.assign(s,{name:d.name||'Student',dev:d.dev||'',hand:!!d.hand,gone:false,state:'connecting'});clearTimeout(s.goneT);
+async function onOffer(id,d){const s=student(id);Object.assign(s,{name:d.name||'Student',dev:d.dev||'',hand:!!d.hand,live:!!d.live,gone:false,state:'connecting'});clearTimeout(s.goneT);
   if(s.pc)s.pc.close();const pc=new RTCPeerConnection({iceServers:[]});s.pc=pc;s.cid=d.cid;
   pc.ontrack=e=>{s.audio.srcObject=e.streams[0]||new MediaStream([e.track]);for(const r of pc.getReceivers()){try{r.jitterBufferTarget=40;}catch(_){}}if(s.listening)s.audio.play().catch(()=>{});};
   pc.ondatachannel=e=>{const dc=e.channel;dc.binaryType='arraybuffer';dc.onmessage=m=>{const v=new Int8Array(m.data);s.levels=[v[0],v[1]];if(v[2])s.clip=performance.now();};};
@@ -302,7 +302,7 @@ async function onOffer(id,d){const s=student(id);Object.assign(s,{name:d.name||'
   sig.send(id,{type:'answer',cid:d.cid,sdp:stereo(pc.localDescription.sdp)});render();}
 sig.onmsg=async(from,d)=>{
   if(d.type==='offer')await onOffer(from,d);
-  else if(d.type==='update'){const s=students.get(from);if(s){if('name' in d)s.name=d.name;if('dev' in d)s.dev=d.dev;if('hand' in d)s.hand=d.hand;paint(s);render();}}
+  else if(d.type==='update'){const s=students.get(from);if(s){if('name' in d)s.name=d.name;if('dev' in d)s.dev=d.dev;if('hand' in d)s.hand=d.hand;if('live' in d){s.live=d.live;if(!s.live)s.levels=[-90,-90];}paint(s);render();}}
   else if(d.type==='bye'){const s=students.get(from);if(s)drop(s);}};
 sig.onreset=()=>sig.send('*',{type:'desk-hello'});
 sig.onoffline=()=>{$('#net').textContent='⚠ server not answering';};
@@ -350,8 +350,10 @@ SEND_CSS = r"""
 .vu{margin:18px 0 6px;padding:14px 16px;border-radius:16px;background:#0a0c10;border:1px solid var(--line);display:grid;gap:8px}
 .vu .row{display:grid;grid-template-columns:14px 1fr 54px;gap:10px;align-items:center;font-size:12px;color:var(--dim);font-weight:700}
 .vu .m{height:16px;border-radius:6px}.vu .pk{text-align:right;color:var(--fg);font-variant-numeric:tabular-nums}
-.btns{display:grid;grid-template-columns:1fr auto;gap:10px;margin-top:18px}
-.hand{font-size:19px;padding:18px;border-radius:18px;background:#222736}.hand.on{background:var(--wait);color:#3a2a10}
+.btns{display:grid;gap:10px;margin-top:18px}
+.hand{font-size:17px;padding:16px;border-radius:16px;background:#222736}.hand.on{background:var(--wait);color:#3a2a10}
+.bcast{font-size:21px;padding:20px;border-radius:18px;background:var(--live);color:var(--ink);display:flex;align-items:center;justify-content:center;gap:12px}
+.bcast.on{background:#2a1418;color:#fff;box-shadow:inset 0 0 0 2px var(--air)}.bcast .rec{width:14px;height:14px;border-radius:50%;background:currentColor}.bcast.on .rec{border-radius:3px;background:var(--air)}
 body.listening .card{border-color:var(--air);box-shadow:0 0 0 2px var(--air),0 0 50px rgba(255,45,85,.3)}
 #joined{display:none}body.in #joined{display:block}body.in #joinbox{display:none}
 """
@@ -372,29 +374,32 @@ SEND_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CBACK</tit
     <div class=vu><div class=row><span>L</span><div class=m><i></i><b></b></div><span class=pk id=pkL>−∞</span></div>
       <div class=row><span>R</span><div class=m><i></i><b></b></div><span class=pk id=pkR>−∞</span></div></div>
     <div class=devinfo id=silent style="display:none"><span class=warn>No signal — is your DAW playing into BlackHole? (See Setup below.)</span></div>
-    <div class=btns><button class=hand id=hand>✋ Ask teacher to listen</button><button class=ghost id=pause>Pause</button></div>
+    <div class=btns><button class=bcast id=bcast><span class=rec></span><span id=bclbl>Start broadcast</span></button><button class=hand id=hand>✋ Ask teacher to listen</button></div>
   </div>
   <div class=err id=err></div>
   <details><summary>Setup — getting your DAW into BlackHole</summary><ol>
     <li>Your DAW plays into <em>BlackHole 2ch</em> — through the class device (Aggregate / Multi-Output with your headphones + BlackHole), so you still hear yourself.</li>
     <li>On this page, <em>Send from</em> = <em>BlackHole 2ch</em>. Chrome takes channels 1–2 of whatever device you pick, so pick BlackHole itself, not the Aggregate.</li>
     <li>Play something: the meters move. Your teacher sees them move too, even before listening.</li>
-    <li>Nothing is sent until the teacher clicks you; the card glows red while they listen.</li></ol></details>
+    <li>Nothing is sent until you press <em>Start broadcast</em> and the teacher clicks you; the card glows red while they listen. <em>Stop broadcast</em> mutes you at once.</li></ol></details>
 </div></div>
 <script>__JS_COMMON__
 const ID=sessionStorage.cb_id||(sessionStorage.cb_id=rnd());const sig=new Signal(ID);
 let name=localStorage.cb_name||'';$('#name').value=name;
-let stream=null,track=null,pc=null,sender=null,dc=null,cid=null,ac=null,listening=false,hand=false,joined=false,paused=false,answered=false,retryT=null,silentSince=0;
+let stream=null,track=null,pc=null,sender=null,dc=null,cid=null,ac=null,listening=false,hand=false,joined=false,live=false,answered=false,retryT=null,silentSince=0;
 
 function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
 function setState(cls,t,sub){$('#dot').className='dot '+cls;$('#state').textContent=t;if(sub!==undefined)$('#sub').textContent=sub;}
 function devLabel(){return track?track.label.replace(/\s*\(.*?\)\s*$/,''):'';}
-function ui(){document.body.classList.toggle('listening',listening);$('#onair').classList.toggle('on',listening);
-  $('#hand').classList.toggle('on',hand);$('#hand').textContent=hand?'✋ Hand raised — click to lower':'✋ Ask teacher to listen';$('#pause').textContent=paused?'Resume':'Pause';
-  if(!joined)return;if(paused)return setState('','Paused','The teacher can’t see or hear you. Press Resume.');
+function ui(){const heard=live&&listening;document.body.classList.toggle('listening',heard);$('#onair').classList.toggle('on',heard);
+  $('#hand').classList.toggle('on',hand);$('#hand').textContent=hand?'✋ Hand raised — click to lower':'✋ Ask teacher to listen';
+  $('#bcast').classList.toggle('on',live);$('#bclbl').textContent=live?'Stop broadcast':'Start broadcast';
+  if(!joined)return;
   if(sig.online===false)return setState('off','Reconnecting…','Lost the connection to the teacher’s Mac.');
-  if(listening)return setState('air','Teacher is listening','Your audio is going to the teacher now.');
-  if(pc&&pc.connectionState==='connected')return setState('live','On the teacher’s desk','They can see your meters. Audio starts when they click you.');
+  if(heard)return setState('air','Teacher is listening','Your audio is going to the teacher now. Stop broadcast mutes you.');
+  const desk=pc&&pc.connectionState==='connected';
+  if(desk&&!live)return setState('',listening?'Teacher wants to hear you':'Not broadcasting',listening?'Press Start broadcast to let them hear you.':'You’re on the teacher’s desk, muted. Press Start broadcast when you want to be heard.');
+  if(desk)return setState('live','Broadcasting','The teacher sees your meters and hears you when they click your name.');
   setState('wait',answered?'Connecting…':'Waiting for the teacher','The teacher’s desk isn’t open yet — you’ll appear when it is.');}
 
 // ---------- capture: BlackHole (or any input), channels 1-2, no speech processing
@@ -413,8 +418,7 @@ async function capture(id){showErr('');
   if(mnode){mnode.port.onmessage=null;mnode.disconnect();}if(msrc)msrc.disconnect();
   msrc=ac.createMediaStreamSource(st);mnode=new AudioWorkletNode(ac,'peak',{numberOfInputs:1,numberOfOutputs:1,channelCount:2,channelCountMode:'explicit',channelInterpretation:'discrete'});
   msrc.connect(mnode);mnode.connect(mute);mnode.port.onmessage=e=>meter(e.data);
-  if(sender&&listening)sender.replaceTrack(track).catch(()=>{});
-  sig.send('desk',{type:'update',dev:devLabel()});}
+  flow();sig.send('desk',{type:'update',dev:devLabel()});}
 // posts [peakL, peakR] every 2048 frames (~45 ms); outputs silence
 const PEAK=`class P extends AudioWorkletProcessor{constructor(){super();this.n=0;this.m=[0,0];}
 process(inp){const x=inp[0];if(x&&x[0]){const R=x[1]||x[0];for(let i=0;i<x[0].length;i++){const a=Math.abs(x[0][i]),b=Math.abs(R[i]);if(a>this.m[0])this.m[0]=a;if(b>this.m[1])this.m[1]=b;}
@@ -426,28 +430,29 @@ function meter(m){const out=new Int8Array(3);const now=performance.now();const r
   for(let c=0;c<2;c++){const db=m[c]>0?Math.max(-90,20*Math.log10(m[c])):-90;out[c]=Math.round(db);if(m[c]>=0.999)out[2]=1;
     rows[c].firstChild.style.width=dbw(db)+'%';if(db>pk[c]||now-hold[c]>1500){pk[c]=db;hold[c]=now;}rows[c].lastChild.style.left=dbw(pk[c])+'%';
     $(c?'#pkR':'#pkL').textContent=pk[c]<=-89?'−∞':pk[c].toFixed(1);}
-  if(dc&&dc.readyState==='open')try{dc.send(out.buffer);}catch(e){}
+  if(dc&&dc.readyState==='open')try{dc.send(live?out.buffer:new Int8Array([-90,-90,0]).buffer);}catch(e){}
   if(Math.max(out[0],out[1])>-70)silentSince=0;else if(!silentSince)silentSince=now;
   $('#silent').style.display=silentSince&&now-silentSince>6000?'block':'none';}
 
 // ---------- connection to the desk: this page offers, the desk answers
+function flow(){if(sender)sender.replaceTrack(live&&listening&&track?track:null).catch(()=>{});}   // audio only when the student broadcasts AND the teacher listens
 function teardown(){if(pc){pc.onconnectionstatechange=null;pc.close();}pc=null;sender=null;dc=null;cid=null;}
-async function offer(){clearTimeout(retryT);if(!joined||paused||!track)return;teardown();answered=false;
+async function offer(){clearTimeout(retryT);if(!joined||!track)return;teardown();answered=false;
   const p=new RTCPeerConnection({iceServers:[]});pc=p;cid=rnd();
   sender=p.addTransceiver('audio',{direction:'sendonly',streams:[stream]}).sender;
-  await sender.replaceTrack(listening?track:null);           // audio flows only while the teacher listens
+  await sender.replaceTrack(live&&listening?track:null);
   dc=p.createDataChannel('lv',{ordered:false,maxRetransmits:0});dc.binaryType='arraybuffer';
   p.onconnectionstatechange=()=>{if(pc!==p)return;const st=p.connectionState;
     if(st==='connected'){try{const prm=sender.getParameters();prm.encodings=prm.encodings&&prm.encodings.length?prm.encodings:[{}];prm.encodings[0].maxBitrate=320000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';sender.setParameters(prm).catch(()=>{});}catch(e){}}
     if(st==='failed'||st==='disconnected'){listening=false;retryT=setTimeout(offer,st==='failed'?500:3000);}
     ui();};
   await p.setLocalDescription(await p.createOffer());await gathered(p);if(pc!==p)return;
-  sig.send('desk',{type:'offer',cid,sdp:stereo(p.localDescription.sdp),name,dev:devLabel(),hand});
+  sig.send('desk',{type:'offer',cid,sdp:stereo(p.localDescription.sdp),name,dev:devLabel(),hand,live});
   retryT=setTimeout(()=>{if(pc===p&&!answered)offer();},15000);ui();}
 sig.onmsg=async(from,d)=>{if(from!=='desk')return;
   if(d.type==='answer'&&pc&&d.cid===cid&&!answered){answered=true;await pc.setRemoteDescription({type:'answer',sdp:d.sdp});ui();}
   else if(d.type==='listen'){listening=!!d.on;if(listening&&hand){hand=false;sig.send('desk',{type:'update',hand});}
-    if(sender)sender.replaceTrack(listening&&track?track:null).catch(()=>{});ui();}
+    flow();ui();}
   else if(d.type==='desk-hello'){listening=false;offer();}};
 sig.onreset=()=>{ui();offer();};sig.onoffline=()=>ui();
 
@@ -459,8 +464,9 @@ $('#join').onclick=async()=>{if(!name)return $('#name').focus();
   catch(e){return showErr(e.name==='NotAllowedError'?'Chrome blocked the microphone permission. Click the icon left of the address and allow it, then Join again.':'Could not open the input: '+e.message);}
   localStorage.cb_dev=$('#dev').value;joined=true;document.body.classList.add('in');ui();offer();};
 $('#dev').onchange=async e=>{localStorage.cb_dev=e.target.value;try{await capture(e.target.value);}catch(err){showErr('Could not open that input: '+err.message);}};
-$('#hand').onclick=()=>{hand=!hand;sig.send('desk',{type:'update',hand});ui();};
-$('#pause').onclick=()=>{paused=!paused;if(paused){listening=false;teardown();navigator.sendBeacon('/api/msg',JSON.stringify({from:ID,to:'desk',data:{type:'bye'}}));}else offer();ui();};
+function setLive(on){live=on;flow();sig.send('desk',{type:'update',live});ui();}
+$('#bcast').onclick=()=>setLive(!live);
+$('#hand').onclick=()=>{hand=!hand;sig.send('desk',{type:'update',hand});if(hand&&!live)setLive(true);ui();};   // asking to be heard starts the broadcast
 navigator.mediaDevices.addEventListener('devicechange',()=>{if(joined)listDevices();});
 addEventListener('pagehide',()=>navigator.sendBeacon('/api/msg',JSON.stringify({from:ID,to:'desk',data:{type:'bye'}})));
 if(!window.isSecureContext)showErr('This page must be opened with https:// — ask your teacher for the link.');

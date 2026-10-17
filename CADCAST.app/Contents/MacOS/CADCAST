@@ -15,11 +15,12 @@ stop_strays() { pkill -f "cadcast.py --daemon" 2>/dev/null; sleep 0.5; }
 
 if running; then
   PORT="$(cat "$PORTF" 2>/dev/null || echo 8090)"
-  CHOICE=$(osascript -e 'display dialog "CADCAST is running." buttons {"Stop CADCAST", "Open desk"} default button "Open desk" with title "CADCAST" with icon POSIX file "'"$DIR"'/CADCAST.app/Contents/Resources/CADCAST.icns"' -e 'button returned of result' 2>/dev/null)
+  CHOICE=$(osascript -e 'display dialog "CADCAST is running." buttons {"Stop CADCAST", "Patch bay", "Listen desk"} default button "Listen desk" with title "CADCAST" with icon POSIX file "'"$DIR"'/CADCAST.app/Contents/Resources/CADCAST.icns"' -e 'button returned of result' 2>/dev/null)
   if [ "$CHOICE" = "Stop CADCAST" ]; then
     stop_strays; rm -f "$PIDF" "$PORTF"; say "Stopped."
   elif [ -n "$CHOICE" ]; then
-    open -a "Google Chrome" "http://localhost:$PORT/desk" 2>/dev/null || open "http://localhost:$PORT/desk"
+    PAGE=desk; [ "$CHOICE" = "Patch bay" ] && PAGE=patch
+    open -a "Google Chrome" "http://localhost:$PORT/$PAGE" 2>/dev/null || open "http://localhost:$PORT/$PAGE"
   fi
   exit 0
 fi

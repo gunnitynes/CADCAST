@@ -5,6 +5,8 @@ CADCAST — CCAST in reverse: students send their computer's audio to the teache
 Zero dependencies: Python 3 standard library only.
   Teacher:   http://localhost:8090/desk        (opens in Chrome automatically)
   Students:  https://<this-mac's-ip>:8091      (shown big on the desk, with a QR)
+  Patch bay: http://localhost:8090/patch       second way to use it: every student is a channel on a
+             https://<ip>:8091/plug            mixer, all live at once; students only see Connect / Connected
 
 A student's DAW plays into BlackHole; their browser captures BlackHole (ch 1-2,
 processing off) and sends it straight to the teacher's browser over WebRTC
@@ -36,7 +38,9 @@ LOCAL = ("127.0.0.1", "::1")
 _lock = threading.Condition()
 _boxes = {}; _seq = {}; _seen = {}
 _names = {}             # student id -> name (for the log)
-_desk_hid = None        # the one desk tab allowed to act as the desk (the newest)
+DESKS = ("desk", "patch")   # the listen desk and the patch bay: mailboxes only this Mac may read
+_desk_hid = {}          # desk id -> the one tab allowed to act as it (the newest)
+_home = {}              # student id -> the desk it talks to
 
 
 def _touch(cid):
@@ -80,11 +84,11 @@ def prune():
         time.sleep(10)
         with _lock:
             now = time.time()
-            for cid in [c for c, t in _seen.items() if c != "desk" and now - t > STALE]:
+            for cid in [c for c, t in _seen.items() if c not in DESKS and now - t > STALE]:
                 _boxes.pop(cid, None); _seq.pop(cid, None); _seen.pop(cid, None)
                 if cid in _names:
                     log(f"{_names.pop(cid)} left")
-                    deliver(cid, "desk", {"type": "bye"})
+                    deliver(cid, _home.pop(cid, "desk"), {"type": "bye"})
 
 
 def log(msg):
@@ -136,7 +140,8 @@ header{display:flex;align-items:center;justify-content:space-between;gap:16px;pa
 label{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:700;margin:18px 0 8px}
 button{font:inherit;font-weight:700;border:0;border-radius:14px;padding:14px 20px;cursor:pointer;background:#222736;color:var(--fg);transition:transform .08s,filter .15s}
 button:hover{filter:brightness(1.12)}button:active{transform:translateY(1px)}button:disabled{opacity:.35;cursor:default;filter:none}
-button.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+button.ghost,a.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+a.btnlink{font-weight:700;border-radius:14px;padding:14px 20px;text-decoration:none;display:inline-block}a.btnlink:hover{color:var(--fg)}
 select,input[type=text]{font:inherit;width:100%;padding:13px 14px;border-radius:14px;background:#0b0d12;color:var(--fg);border:1px solid var(--line)}
 select{appearance:none}
 input[type=range]{accent-color:var(--live)}
@@ -238,6 +243,7 @@ DESK_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CADCAST ·
     <select id=out title="Listen on"><option value="">System output</option></select>
     <span class=vol>VOL<input type=range id=vol min=0 max=1 step=0.01 value=0.9></span>
     <button class=ghost id=proj>⛶ Projector</button>
+    <a class="ghost btnlink" href="/patch" title="Second way: everyone on a mixer">⇄ Patch bay</a>
   </div>
 </header>
 <div class="card share">
@@ -474,12 +480,265 @@ sig.run();ui();
 </script></body></html>"""
 
 
+# ----------------------------------------------------------------- patch bay (second way): everyone on a mixer
+# Students only see Connect / Connected and are live while connected, like a cable in a jack.
+# On the teacher's side every connection is its own channel strip with a generic name (Input 01 …),
+# summed to a stereo mix or sent to its own channel pair of a multichannel device (one DAW track each).
+PEAK_JS = r"""class P extends AudioWorkletProcessor{constructor(){super();this.n=0;this.m=[0,0];}
+process(inp){const x=inp[0];if(x&&x[0]){const R=x[1]||x[0];for(let i=0;i<x[0].length;i++){const a=Math.abs(x[0][i]),b=Math.abs(R[i]);if(a>this.m[0])this.m[0]=a;if(b>this.m[1])this.m[1]=b;}
+ this.n+=x[0].length;if(this.n>=2048){this.port.postMessage(this.m);this.m=[0,0];this.n=0;}}return true;}}registerProcessor('peak',P);"""
+
+PLUG_CSS = r"""
+.plug{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:90px 16px 40px;text-align:center;position:relative}
+.plug .brand{position:absolute;top:24px;left:50%;transform:translateX(-50%)}
+.jack{--l:0;position:relative;width:min(66vw,260px);aspect-ratio:1;border-radius:50%;padding:0;background:#141821;border:2px solid #2a3040;color:var(--fg);
+ font-size:26px;font-weight:800;letter-spacing:-.01em;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;transition:background .2s,border-color .2s,color .2s}
+.jack svg{width:40px;height:40px}
+.jack .ring{position:absolute;inset:-16px;border-radius:50%;border:3px solid var(--live);opacity:0;transform:scale(calc(.95 + var(--l) * .1));transition:transform .06s linear,opacity .2s;pointer-events:none}
+.jack.wait{border-color:var(--wait);color:var(--wait)}.jack.wait .ring{border-color:var(--wait);opacity:.5;animation:breathe 1.6s ease-in-out infinite}
+.jack.on{background:var(--live);border-color:var(--live);color:var(--ink);box-shadow:0 0 calc(24px + var(--l) * 70px) rgba(57,255,136,calc(.2 + var(--l) * .5))}
+.jack.on .ring{opacity:calc(.2 + var(--l) * .8)}
+@keyframes breathe{50%{transform:scale(1.06);opacity:.12}}
+.plug .sub{color:var(--dim);font-size:15px;min-height:22px}.plug .dev{color:var(--mute);font-size:12px;min-height:16px}
+.plug .err{max-width:420px}
+"""
+
+PLUG_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CADCAST</title>
+<meta name=viewport content="width=device-width,initial-scale=1"><style>__CSS____PLUG_CSS__</style></head><body>
+<div class=plug>
+  <div class=brand><div class=logo>__ICON__</div><div class=stname>CADCAST</div></div>
+  <button class=jack id=jack><span class=ring></span>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8zM12 18v4"/></svg>
+    <span id=lbl>Connect</span></button>
+  <div class=sub id=sub></div>
+  <div class=dev id=dev></div>
+  <div class=err id=err></div>
+</div>
+<script>__JS_COMMON__
+const DESK='patch';const ID=sessionStorage.cp_id||(sessionStorage.cp_id=rnd());const sig=new Signal(ID);
+let want=false,stream=null,track=null,pc=null,cid=null,answered=false,retryT=null,ac=null,msrc=null,mnode=null,sink=null,lvl=0;
+const PEAK=`__PEAK_JS__`;
+function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
+function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');j.classList.toggle('on',want&&c);j.classList.toggle('wait',want&&!c);
+  $('#lbl').textContent=!want?'Connect':c?'Connected':'Connecting…';
+  $('#sub').textContent=!want||c?'':sig.online===false?'Reconnecting…':answered?'':'Waiting for the teacher';}
+
+// The input: BlackHole when it's there (else an Aggregate, else the default input), channels 1-2, no processing.
+async function capture(){ac=ac||new (window.AudioContext||window.webkitAudioContext)();await ac.resume();
+  if(!sink){await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([PEAK],{type:'application/javascript'})));sink=ac.createGain();sink.gain.value=0;sink.connect(ac.destination);}
+  const C=id=>({audio:{deviceId:id?{exact:id}:undefined,channelCount:{ideal:2},sampleRate:{ideal:48000},echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  let st=await navigator.mediaDevices.getUserMedia(C());
+  const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+  const pick=all.find(d=>/blackhole/i.test(d.label))||all.find(d=>/aggregate/i.test(d.label));
+  if(pick&&st.getAudioTracks()[0].getSettings().deviceId!==pick.deviceId){st.getTracks().forEach(t=>t.stop());st=await navigator.mediaDevices.getUserMedia(C(pick.deviceId));}
+  stream=st;track=st.getAudioTracks()[0];try{track.contentHint='music';}catch(e){}
+  track.onended=()=>{if(want){showErr('The input went away.');unplug();}};
+  $('#dev').textContent=track.label.replace(/\s*\(.*?\)\s*$/,'');
+  // the ring breathes with the signal: measured on the audio thread, so it keeps up behind the DAW
+  msrc=ac.createMediaStreamSource(st);mnode=new AudioWorkletNode(ac,'peak',{numberOfInputs:1,numberOfOutputs:1,channelCount:2,channelCountMode:'explicit',channelInterpretation:'discrete'});
+  msrc.connect(mnode);mnode.connect(sink);
+  mnode.port.onmessage=e=>{const p=Math.max(e.data[0],e.data[1]);const v=p>0?Math.max(0,(20*Math.log10(p)+60)/60):0;lvl=Math.max(v,lvl*0.8);$('#jack').style.setProperty('--l',lvl.toFixed(3));};}
+function release(){if(msrc)msrc.disconnect();if(mnode){mnode.port.onmessage=null;mnode.disconnect();}msrc=mnode=null;
+  if(stream)stream.getTracks().forEach(t=>t.stop());stream=track=null;lvl=0;$('#jack').style.setProperty('--l',0);$('#dev').textContent='';}
+
+function teardown(){if(pc){pc.onconnectionstatechange=null;pc.close();}pc=null;cid=null;}
+async function offer(){clearTimeout(retryT);if(!want||!track)return;teardown();answered=false;
+  const p=new RTCPeerConnection({iceServers:[]});pc=p;cid=rnd();
+  const sender=p.addTransceiver(track,{direction:'sendonly',streams:[stream]}).sender;   // live the whole time it's connected
+  p.onconnectionstatechange=()=>{if(pc!==p)return;const st=p.connectionState;
+    if(st==='connected'){try{const prm=sender.getParameters();prm.encodings=prm.encodings&&prm.encodings.length?prm.encodings:[{}];prm.encodings[0].maxBitrate=320000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';sender.setParameters(prm).catch(()=>{});}catch(e){}}
+    if(st==='failed'||st==='disconnected')retryT=setTimeout(offer,st==='failed'?500:3000);
+    ui();};
+  await p.setLocalDescription(await p.createOffer());await gathered(p);if(pc!==p)return;
+  sig.send(DESK,{type:'offer',cid,sdp:stereo(p.localDescription.sdp),dev:$('#dev').textContent});
+  retryT=setTimeout(()=>{if(pc===p&&!answered)offer();},15000);ui();}
+sig.onmsg=async(from,d)=>{if(from!==DESK)return;
+  if(d.type==='answer'&&pc&&d.cid===cid&&!answered){answered=true;await pc.setRemoteDescription({type:'answer',sdp:d.sdp});ui();}
+  else if(d.type==='desk-hello')offer();};
+sig.onreset=()=>{ui();offer();};sig.onoffline=()=>ui();
+const bye=()=>navigator.sendBeacon('/api/msg',JSON.stringify({from:ID,to:DESK,data:{type:'bye'}}));
+async function plug(){want=true;showErr('');ui();
+  try{if(!track)await capture();}
+  catch(e){want=false;release();ui();return showErr(e.name==='NotAllowedError'?'Allow the microphone (the icon left of the address), then tap Connect again.':'Could not open the input: '+e.message);}
+  offer();}
+function unplug(){want=false;clearTimeout(retryT);teardown();bye();release();ui();}
+$('#jack').onclick=()=>want?unplug():plug();
+addEventListener('pagehide',()=>{if(want)bye();});
+if(!window.isSecureContext)showErr('This page must be opened with https:// — ask your teacher for the link.');
+sig.run();ui();
+</script></body></html>"""
+
+PATCH_CSS = DESK_CSS + r"""
+.seg{display:inline-flex;gap:4px;background:#0b0d12;border:1px solid var(--line);border-radius:12px;padding:4px}
+.seg button{background:transparent;color:var(--dim);padding:8px 12px;border-radius:9px;font-size:13px}.seg button.on{background:#222736;color:var(--fg)}
+#start{background:var(--wait);color:#3a2a10}
+.strips{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:12px}
+.strip{background:#141821;border:1px solid var(--line);border-radius:16px;padding:14px 10px 12px;display:flex;flex-direction:column;align-items:center;gap:8px;transition:opacity .2s}
+.strip .nm{font-weight:800;font-size:16px;letter-spacing:-.01em}
+.strip .out{font-size:11px;color:var(--mute);font-family:ui-monospace,Menlo,monospace;min-height:14px}
+.strip .body{display:flex;gap:14px;align-items:stretch;height:170px}
+.strip .vm{display:flex;gap:4px}
+.strip .vm .m{width:10px;height:100%}
+.strip .vm .m i{inset:auto 0 0 0;width:auto;height:0;background:linear-gradient(0deg,#1fd1ff 0%,var(--live) 55%,#e9ff5c 82%,var(--off) 96%)}
+.strip .vm .m b{left:0;right:0;width:auto;height:2px;top:auto;bottom:0}
+.fader{writing-mode:vertical-lr;direction:rtl;width:22px;height:100%;margin:0;accent-color:var(--live)}
+.strip .db{font-size:12px;color:var(--dim);font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums}
+.strip .btns{display:flex;gap:6px}
+.strip .btns button{padding:7px 12px;border-radius:9px;font-size:13px;background:#0f1218;border:1px solid var(--line);color:var(--dim)}
+.strip .btns .mb.on{background:var(--off);color:#fff;border-color:var(--off)}.strip .btns .sb.on{background:#e9ff5c;color:#232600;border-color:#e9ff5c}
+.strip .st{font-size:12px;color:var(--mute);font-weight:600}
+.strip.silent .nm,.strip.silent .vm{opacity:.35}
+.strip.gone{opacity:.35}
+.strip.live .st{color:var(--live)}
+body.projector .strips{display:none}
+"""
+
+PATCH_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CADCAST · Patch bay</title>
+<meta name=viewport content="width=device-width,initial-scale=1"><style>__CSS____PATCH_CSS__</style></head><body>
+<div class=wrap>
+<header>
+  <div class=brand><div class=logo>__ICON__</div><div><div class=stname>CADCAST</div><div class=sttag>patch bay</div></div>
+    <span class=pill><span class=dot id=sdot></span><b id=count>0</b> plugged in</span>
+    <button id=start hidden>▶ Start audio</button></div>
+  <div class=tools>
+    <select id=out title="Output device"><option value="">System output</option></select>
+    <span class=seg id=mode><button data-m=mix>Stereo mix</button><button data-m=sep>Separate outputs</button></span>
+    <span class=vol>VOL<input type=range id=vol min=0 max=1 step=0.01></span>
+    <button class=ghost id=proj>⛶ Projector</button>
+    <a class="ghost btnlink" href="/desk" title="Click-to-listen desk">⇄ Listen desk</a>
+  </div>
+</header>
+<div class="card share">
+  <div><h2>Plug in at</h2><div class="url mono" id=url>…</div>
+    <div class=hint>Open the link and tap <b>Connect</b>. That’s all: you’re live until you tap again.<br>
+    First time only: Chrome says “not private” → <b>Advanced</b> → <b>Proceed</b>.</div></div>
+  <div class=qr id=qr></div>
+</div>
+<div class=strips id=strips></div>
+<div class=foot><span id=route></span><span><b>M</b> mute · <b>S</b> solo · double-click a fader for 0 dB</span><span id=net></span></div>
+<div class=err id=err></div>
+</div>
+<div class=cover id=stale><div><h2>The patch bay moved to a newer tab</h2><p class=hint>Close this one.</p></div></div>
+<script src="/qrcode.min.js"></script>
+<script>__JS_COMMON__
+const DESK='patch';const hid=rnd();const sig=new Signal(DESK,'&hid='+hid);
+const users=new Map();   // id -> {id,num,name,dev,pc,el,src,gain,an,vol,mute,solo,peak,state,gone,outs}
+const nums=new Map();    // id -> input number, kept while they might reconnect
+const ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+let mode=localStorage.cp_mode==='sep'?'sep':'mix',sinkId=localStorage.cp_out||'',master=+(localStorage.cp_vol||0.9),merger=null,outName='System output';
+$('#vol').value=master;
+
+function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
+function sorted(){return [...users.values()].sort((a,b)=>a.num-b.num);}
+function audible(u){const solo=[...users.values()].some(x=>x.solo&&!x.gone);return !u.mute&&(!solo||u.solo);}
+function gains(){for(const u of users.values())if(u.gain)u.gain.gain.setTargetAtTime(audible(u)?u.vol*u.vol*master:0,ac.currentTime,0.015);}
+
+// ---------- routing: a stereo mix, or Input N -> channels 2N-1 / 2N of the output device
+function route(){const d=ac.destination;if(merger){merger.disconnect();merger=null;}
+  for(const u of users.values()){u.outs=null;if(u.gain)try{u.gain.disconnect();}catch(e){}}
+  if(mode==='mix'){d.channelCount=2;d.channelCountMode='explicit';d.channelInterpretation='speakers';for(const u of users.values())if(u.gain)u.gain.connect(d);}
+  else{const max=Math.max(2,Math.min(d.maxChannelCount||2,32));d.channelCount=max;d.channelCountMode='explicit';d.channelInterpretation='discrete';
+    merger=ac.createChannelMerger(max);merger.connect(d);
+    for(const u of users.values()){const a=(u.num-1)*2;if(a+1>=max)continue;u.outs=[a,a+1];if(!u.gain)continue;
+      const sp=ac.createChannelSplitter(2);u.gain.connect(sp);sp.connect(merger,0,a);sp.connect(merger,1,a+1);}}
+  for(const b of $('#mode').children)b.classList.toggle('on',b.dataset.m===mode);
+  const max=ac.destination.maxChannelCount||2;
+  $('#route').innerHTML=mode==='mix'?`<b>Stereo mix</b> → ${esc(outName)}`:
+    `<b>Separate outputs</b> → ${esc(outName)} · ${Math.floor(Math.min(max,32)/2)} stereo tracks (Input N on channels 2N−1 / 2N)`+(max<4?' · <span style="color:var(--wait)">pick a multichannel device (e.g. BlackHole 16ch)</span>':'');
+  sorted().forEach(paint);}
+
+// ---------- strips
+function makeStrip(u){const el=document.createElement('div');el.className='strip';
+  el.innerHTML='<div class=nm></div><div class=out></div><div class=body><div class=vm><div class=m><i></i><b></b></div><div class=m><i></i><b></b></div></div><input type=range class=fader min=0 max=1.25 step=0.01></div><div class=db></div><div class=btns><button class=mb title=Mute>M</button><button class=sb title=Solo>S</button></div><div class=st></div>';
+  const f=el.querySelector('.fader');f.value=u.vol;
+  f.oninput=()=>{u.vol=+f.value;gains();paint(u);};f.ondblclick=()=>{u.vol=1;f.value=1;gains();paint(u);};
+  el.querySelector('.mb').onclick=()=>{u.mute=!u.mute;gains();sorted().forEach(paint);};
+  el.querySelector('.sb').onclick=()=>{u.solo=!u.solo;gains();sorted().forEach(paint);};
+  u.strip=el;u.bars=el.querySelectorAll('.m');}
+function paint(u){const el=u.strip;if(!el)return;el.querySelector('.nm').textContent=u.name;el.title=u.dev?'Input device: '+u.dev:'';
+  el.querySelector('.out').textContent=mode==='sep'?(u.outs?`→ out ${u.outs[0]+1}–${u.outs[1]+1}`:'→ no channels left'):'→ mix';
+  const db=20*Math.log10(u.vol*u.vol);el.querySelector('.db').textContent=u.vol<=0?'−∞':(db>=0?'+':'')+db.toFixed(1)+' dB';
+  el.querySelector('.mb').classList.toggle('on',u.mute);el.querySelector('.sb').classList.toggle('on',u.solo);
+  el.classList.toggle('gone',u.gone);el.classList.toggle('silent',!u.gone&&!audible(u));el.classList.toggle('live',!u.gone&&u.state==='connected');
+  el.querySelector('.st').textContent=u.gone?'unplugged':u.state==='connected'?'connected':'connecting…';}
+function render(){const list=sorted();const box=$('#strips');
+  if(!list.length)box.innerHTML='<div class=empty>Nothing plugged in yet — students open the link above and tap Connect.</div>';
+  else{const have=new Set();for(const u of list){if(!u.strip)makeStrip(u);have.add(u.strip);box.appendChild(u.strip);paint(u);}[...box.children].forEach(c=>{if(!have.has(c))c.remove();});}
+  const n=list.filter(u=>!u.gone).length;$('#count').textContent=n;$('#sdot').className='dot'+(n?' live':'');
+  document.body.classList.toggle('compact',list.length>0&&!document.body.classList.contains('projector'));}
+
+// ---------- peers: each plug offers, the patch bay answers
+function detach(u){if(u.src)u.src.disconnect();if(u.gain)try{u.gain.disconnect();}catch(e){}if(u.el)u.el.srcObject=null;u.src=u.gain=u.el=u.an=null;}
+function attach(u,stream,pc){for(const r of pc.getReceivers()){try{r.jitterBufferTarget=20;}catch(e){}}
+  detach(u);u.el=new Audio();u.el.muted=true;u.el.srcObject=stream;u.el.play().catch(()=>{});   // Chrome only feeds remote WebRTC audio to Web Audio while a media element holds the stream
+  u.src=ac.createMediaStreamSource(stream);u.gain=ac.createGain();u.gain.gain.value=0;u.src.connect(u.gain);
+  const sp=ac.createChannelSplitter(2);u.src.connect(sp);u.an=[0,1].map(c=>{const a=ac.createAnalyser();a.fftSize=1024;sp.connect(a,c);return a;});
+  route();gains();}
+function drop(u){if(u.pc)u.pc.close();detach(u);users.delete(u.id);nums.delete(u.id);if(u.strip)u.strip.remove();route();render();}
+async function onOffer(id,d){let u=users.get(id);
+  if(!u){let num=nums.get(id);if(!num){const used=new Set([...users.values()].map(x=>x.num));num=1;while(used.has(num))num++;nums.set(id,num);}
+    u={id,num,name:'Input '+String(num).padStart(2,'0'),vol:1,mute:false,solo:false,peak:[-90,-90],state:'new',gone:false};users.set(id,u);}
+  u.dev=d.dev||'';u.gone=false;u.state='connecting';clearTimeout(u.goneT);
+  if(u.pc)u.pc.close();const pc=new RTCPeerConnection({iceServers:[]});u.pc=pc;
+  pc.ontrack=e=>attach(u,e.streams[0]||new MediaStream([e.track]),pc);
+  pc.onconnectionstatechange=()=>{if(u.pc!==pc)return;const st=pc.connectionState;u.state=st;
+    if(st==='connected'){u.gone=false;clearTimeout(u.goneT);}
+    if(st==='failed'||st==='closed'||st==='disconnected'){u.goneT=setTimeout(()=>{if(u.pc===pc&&pc.connectionState!=='connected'){u.gone=true;gains();paint(u);render();
+        u.goneT=setTimeout(()=>{if(u.gone)drop(u);},30000);}},4000);}
+    paint(u);render();};
+  await pc.setRemoteDescription({type:'offer',sdp:d.sdp});
+  await pc.setLocalDescription(await pc.createAnswer());await gathered(pc);
+  sig.send(id,{type:'answer',cid:d.cid,sdp:stereo(pc.localDescription.sdp)});render();}
+sig.onmsg=async(from,d)=>{if(d.type==='offer')await onOffer(from,d);else if(d.type==='bye'){const u=users.get(from);if(u)drop(u);}};
+sig.onreset=()=>sig.send('*',{type:'desk-hello'});
+sig.onoffline=()=>{$('#net').textContent='⚠ server not answering';};
+sig.onstale=()=>{for(const u of users.values())if(u.pc)u.pc.close();ac.close();$('#stale').classList.add('show');};
+
+// ---------- meters (pre-fader)
+const buf=new Float32Array(1024);
+function frame(){for(const u of users.values()){if(!u.bars)continue;for(let c=0;c<2;c++){let db=-90;
+      if(u.an&&!u.gone){u.an[c].getFloatTimeDomainData(buf);let m=0;for(let i=0;i<buf.length;i++){const v=Math.abs(buf[i]);if(v>m)m=v;}if(m>0)db=Math.max(-90,20*Math.log10(m));}
+      u.peak[c]=Math.max(db,u.peak[c]-0.6);u.bars[c].firstChild.style.height=dbw(db)+'%';u.bars[c].lastChild.style.bottom=dbw(u.peak[c])+'%';}}
+  requestAnimationFrame(frame);}
+
+// ---------- output device, mode, volume, audio start
+async function listOutputs(){try{const all=await navigator.mediaDevices.enumerateDevices();const sel=$('#out');
+  const outs=all.filter(d=>d.kind==='audiooutput'&&d.deviceId!=='default'&&d.deviceId);
+  sel.innerHTML='<option value="">System output</option>'+outs.map(d=>`<option value="${esc(d.deviceId)}">${esc(d.label||'Output')}</option>`).join('');
+  sel.value=outs.some(o=>o.deviceId===sinkId)?sinkId:'';outName=sel.options[sel.selectedIndex].text;}catch(e){}}
+async function setOut(id){sinkId=id;localStorage.cp_out=id;outName=$('#out').options[$('#out').selectedIndex]?.text||'System output';
+  try{if(ac.setSinkId)await ac.setSinkId(id);else if(id)showErr('This Chrome cannot choose an output for the patch bay; it plays on the system output.');}catch(e){showErr('Output: '+e.message);}
+  route();}
+$('#out').onchange=e=>setOut(e.target.value);
+$('#mode').onclick=e=>{const m=e.target.dataset&&e.target.dataset.m;if(!m)return;mode=m;localStorage.cp_mode=m;route();};
+$('#vol').oninput=e=>{master=+e.target.value;localStorage.cp_vol=master;gains();};
+$('#proj').onclick=()=>{document.body.classList.toggle('projector');render();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('projector')){document.body.classList.remove('projector');render();}});
+const startBtn=()=>{$('#start').hidden=ac.state==='running';};ac.onstatechange=startBtn;
+$('#start').onclick=()=>ac.resume();document.addEventListener('pointerdown',()=>{if(ac.state!=='running')ac.resume();});
+
+(async()=>{
+  try{const st=await navigator.mediaDevices.getUserMedia({audio:true});st.getTracks().forEach(t=>t.stop());}catch(e){}   // output names + plain LAN addresses
+  await listOutputs();navigator.mediaDevices.addEventListener('devicechange',listOutputs);
+  if(sinkId)await setOut(sinkId);else route();
+  ac.resume().catch(()=>{});startBtn();
+  const i=await (await fetch('/api/info')).json();
+  if(i.https){const link=i.https+'/plug';$('#url').innerHTML=link.replace(/^https:\/\/([^:]+)/,'https://<b>$1</b>');try{new QRCode($('#qr'),{text:link,width:480,height:480,correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
+  else{$('#url').textContent='—';showErr('No https: students cannot capture audio without it. Is openssl available?');}
+  await fetch('/api/reset?id=patch&hid='+hid);sig.run();sig.send('*',{type:'desk-hello'});render();requestAnimationFrame(frame);
+})();
+</script></body></html>"""
+
+
 def _page(html, extra_css):
     return (html.replace("__CSS__", CSS).replace("__DESK_CSS__", extra_css).replace("__SEND_CSS__", extra_css)
-                .replace("__JS_COMMON__", JS_COMMON).replace("__ICON__", ICON))
+                .replace("__PATCH_CSS__", extra_css).replace("__PLUG_CSS__", extra_css)
+                .replace("__JS_COMMON__", JS_COMMON).replace("__PEAK_JS__", PEAK_JS).replace("__ICON__", ICON))
 
 
 DESK = _page(DESK_HTML, DESK_CSS)
+PATCH = _page(PATCH_HTML, PATCH_CSS)
+PLUG = _page(PLUG_HTML, PLUG_CSS)
 SEND = _page(SEND_HTML, SEND_CSS)
 try:
     QR_JS = open(os.path.join(HERE, "qrcode.min.js"), "rb").read()
@@ -522,7 +781,6 @@ class H(BaseHTTPRequestHandler):
         self._send(302, "", "text/plain", [("Location", to)])
 
     def do_GET(self):
-        global _desk_hid
         u = urlparse(self.path); q = parse_qs(u.query)
         if u.path == "/":
             if self.TLS:
@@ -530,6 +788,10 @@ class H(BaseHTTPRequestHandler):
             return self._redirect("/desk" if self._local() else (URL_TLS or "/desk"))
         if u.path == "/desk":   # the teacher's Mac only: students must not listen to each other
             return self._send(200, DESK, "text/html") if self._local() else self._redirect(URL_TLS or "/")
+        if u.path == "/plug":
+            return self._send(200, PLUG, "text/html") if self.TLS else self._redirect((URL_TLS or "") + "/plug")
+        if u.path == "/patch":
+            return self._send(200, PATCH, "text/html") if self._local() else self._redirect((URL_TLS or "") + "/plug")
         if u.path == "/qrcode.min.js":
             return self._send(200, QR_JS, "application/javascript")
         if u.path == "/api/info":
@@ -538,13 +800,16 @@ class H(BaseHTTPRequestHandler):
             cid = q.get("id", [""])[0]
             if not cid:
                 return self._send(400, "{}")
-            if cid == "desk" and (not self._local() or q.get("hid", [""])[0] != _desk_hid):
+            if cid in DESKS and (not self._local() or q.get("hid", [""])[0] != _desk_hid.get(cid)):
                 return self._send(200, json.dumps({"gen": GEN, "msgs": [], "stale": True}))
             after = int(q.get("after", ["0"])[0] or 0)
             return self._send(200, json.dumps({"gen": GEN, "msgs": take(cid, after, POLL_WAIT)}))
         if u.path == "/api/reset" and self._local():
-            _desk_hid = q.get("hid", [""])[0]
-            log("desk opened"); reset("desk"); return self._send(200, "{}")
+            cid = q.get("id", ["desk"])[0]
+            if cid not in DESKS:
+                return self._send(400, "{}")
+            _desk_hid[cid] = q.get("hid", [""])[0]
+            log(("patch bay" if cid == "patch" else "desk") + " opened"); reset(cid); return self._send(200, "{}")
         self._send(404, "not found", "text/plain")
 
     def do_POST(self):
@@ -553,12 +818,13 @@ class H(BaseHTTPRequestHandler):
         try:
             m = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))))
             sender, to, data = str(m["from"])[:40], str(m["to"])[:40], m["data"]
-            if sender == "desk" and not self._local():
+            if sender in DESKS and not self._local():
                 return self._send(403, "{}")
             deliver(sender, to, data)
             t = data.get("type") if isinstance(data, dict) else None
             if t == "offer":
-                nm = str(data.get("name") or "student")[:32]
+                _home[sender] = to
+                nm = str(data.get("name") or ("patch input" if to == "patch" else "student"))[:32]
                 if sender not in _names:
                     log(f"{nm} joined ({len(_names) + 1} online)")
                 _names[sender] = nm
@@ -653,7 +919,8 @@ if __name__ == "__main__":
             log(f"no https: {e}")
     write_runfiles(PORT)
     threading.Thread(target=prune, daemon=True).start()
-    box = [f"Students open   {URL_TLS or '- (no https)'}", f"You (teacher)   http://localhost:{PORT}/desk"]
+    box = [f"Students open   {URL_TLS or '- (no https)'}", f"You (teacher)   http://localhost:{PORT}/desk",
+           f"Patch bay       http://localhost:{PORT}/patch  ·  students {URL_TLS or '-'}/plug"]
     w = max(len(b) for b in box) + 4
     print("\n  ┌" + "─" * w + "┐\n  │" + "CADCAST".center(w) + "│\n  ├" + "─" * w + "┤")
     for b in box:

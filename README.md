@@ -31,6 +31,21 @@ their page says *Teacher wants to hear you*). Raising a hand starts the broadcas
 The student sees a red **TEACHER LISTENING** light only while they broadcast *and* you listen. Audio leaves their
 machine only then; otherwise at most a meter does, so 25 students on Wi‑Fi cost almost nothing.
 
+## Second way: the patch bay
+For when you want everyone at once, like students plugged into your console.
+- Open it with **⇄ Patch bay** on the desk (or click CADCAST in the Dock while it runs → *Patch bay*):
+  `http://localhost:8090/patch`. Project its own link + QR: `https://<this-mac>:8091/plug`.
+- **Students see one button: Connect → Connected.** No name, no device picker, no broadcast switch: they are live
+  while connected, like a cable in a jack (tap again to unplug). The ring around the button moves with their signal.
+  BlackHole is used when it's there, else an Aggregate, else the default input.
+- **You get a channel strip per connection**, named for you (**Input 01, Input 02 …**, lowest free number; a
+  student who drops and comes back keeps theirs). Everyone plays at once: pre-fader meters, fader (double-click =
+  0 dB), **M**ute, **S**olo, master **VOL**.
+- **Stereo mix**: all inputs summed to the chosen output. **Separate outputs**: Input N goes to channels
+  2N−1/2N of a multichannel device (e.g. *BlackHole 16ch* → 8 stereo DAW tracks; arm one track per pair to record
+  everyone separately). Inputs beyond the device's channels say *no channels left*.
+- The listen desk and the patch bay run side by side; each has its own students.
+
 ## Student setup (BlackHole)
 Chrome captures **channels 1–2 of the device the student picks**, so the page should get BlackHole itself:
 - DAW output → a device that includes BlackHole: a **Multi-Output Device** (headphones/interface + BlackHole 2ch,

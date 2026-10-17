@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-CBACK — CCAST in reverse: students send their computer's audio to the teacher's desk.
+CADCAST — CCAST in reverse: students send their computer's audio to the teacher's desk.
 
 Zero dependencies: Python 3 standard library only.
   Teacher:   http://localhost:8090/desk        (opens in Chrome automatically)
@@ -227,11 +227,11 @@ body.projector .share .hint{display:block;font-size:20px}
 @media(max-width:700px){.share{grid-template-columns:1fr}.url{font-size:26px}}
 """
 
-DESK_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CBACK · Desk</title>
+DESK_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CADCAST · Desk</title>
 <meta name=viewport content="width=device-width,initial-scale=1"><style>__CSS____DESK_CSS__</style></head><body>
 <div class=wrap>
 <header>
-  <div class=brand><div class=logo>__ICON__</div><div><div class=stname>CBACK</div><div class=sttag>students → teacher</div></div>
+  <div class=brand><div class=logo>__ICON__</div><div><div class=stname>CADCAST</div><div class=sttag>students → teacher</div></div>
     <span class=pill><span class=dot id=sdot></span><b id=count>0</b> online</span>
     <div class=onair id=onair>LISTENING</div></div>
   <div class=tools>
@@ -358,10 +358,10 @@ body.listening .card{border-color:var(--air);box-shadow:0 0 0 2px var(--air),0 0
 #joined{display:none}body.in #joined{display:block}body.in #joinbox{display:none}
 """
 
-SEND_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CBACK</title>
+SEND_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CADCAST</title>
 <meta name=viewport content="width=device-width,initial-scale=1"><style>__CSS____SEND_CSS__</style></head><body>
 <div class=send>
-<header><div class=brand><div class=logo>__ICON__</div><div><div class=stname>CBACK</div><div class=sttag>send your audio to the teacher</div></div></div>
+<header><div class=brand><div class=logo>__ICON__</div><div><div class=stname>CADCAST</div><div class=sttag>send your audio to the teacher</div></div></div>
   <div class=onair id=onair>TEACHER LISTENING</div></header>
 <div class=card>
   <div class=state><span class=dot id=dot></span><span id=state>Not joined</span></div>
@@ -573,7 +573,7 @@ class HS(H):
     TLS = True
 
 
-RUNFILES = [os.path.join(HERE, ".cback.pid"), os.path.join(HERE, ".cback.port")]
+RUNFILES = [os.path.join(HERE, ".cadcast.pid"), os.path.join(HERE, ".cadcast.port")]
 
 
 def write_runfiles(port):
@@ -594,7 +594,7 @@ _CC = os.path.expanduser("~/ClassCast")
 if os.path.exists(os.path.join(_CC, ".classcast-cert-v2.pem")):
     CERT, KEY = os.path.join(_CC, ".classcast-cert-v2.pem"), os.path.join(_CC, ".classcast-key-v2.pem")
 else:
-    CERT, KEY = os.path.join(HERE, ".cback-cert.pem"), os.path.join(HERE, ".cback-key.pem")
+    CERT, KEY = os.path.join(HERE, ".cadcast-cert.pem"), os.path.join(HERE, ".cadcast-key.pem")
 
 
 def ensure_cert(ip):
@@ -602,7 +602,7 @@ def ensure_cert(ip):
         return True
     try:
         subprocess.run(["openssl", "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", KEY, "-out", CERT, "-days", "397",
-                        "-subj", "/CN=CBACK", "-addext", f"subjectAltName=IP:{ip},DNS:localhost"], check=True, capture_output=True)
+                        "-subj", "/CN=CADCAST", "-addext", f"subjectAltName=IP:{ip},DNS:localhost"], check=True, capture_output=True)
         return True
     except Exception as e:
         log(f"no https (openssl): {e}"); return False
@@ -631,7 +631,7 @@ def daemonize():
     if os.fork():
         os._exit(0)
     os.chdir(HERE)
-    logf = open(os.path.join(HERE, "cback.log"), "ab", buffering=0)
+    logf = open(os.path.join(HERE, "cadcast.log"), "ab", buffering=0)
     devnull = os.open(os.devnull, os.O_RDONLY)
     os.dup2(devnull, 0); os.dup2(logf.fileno(), 1); os.dup2(logf.fileno(), 2)
 
@@ -655,7 +655,7 @@ if __name__ == "__main__":
     threading.Thread(target=prune, daemon=True).start()
     box = [f"Students open   {URL_TLS or '- (no https)'}", f"You (teacher)   http://localhost:{PORT}/desk"]
     w = max(len(b) for b in box) + 4
-    print("\n  ┌" + "─" * w + "┐\n  │" + "CBACK".center(w) + "│\n  ├" + "─" * w + "┤")
+    print("\n  ┌" + "─" * w + "┐\n  │" + "CADCAST".center(w) + "│\n  ├" + "─" * w + "┤")
     for b in box:
         print("  │  " + b.ljust(w - 2) + "│")
     print("  └" + "─" * w + "┘\n  Close this window or press Ctrl-C to stop.\n", flush=True)

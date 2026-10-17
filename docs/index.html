@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>CBACK</title>
+<title>CADCAST</title>
 <meta name="description" content="Students send their DAW's audio to the teacher's Mac over the classroom Wi-Fi. No installs, no AirDrop.">
 <link rel="icon" href="icon.png">
 <style>
@@ -40,16 +40,16 @@ table{width:100%;border-collapse:collapse;font-size:15px}td{padding:10px 0;borde
 footer{margin-top:80px;color:var(--mute);font-size:14px;border-top:1px solid var(--line);padding-top:20px}
 </style></head><body><div class="wrap">
 
-<header><img src="icon.png" alt=""><div><b>CBACK</b><br><span>students → teacher</span></div>
-  <nav><a href="#how">How it works</a><a href="#setup">Setup</a><a href="https://github.com/gunnitynes/CBack">GitHub</a></nav></header>
+<header><img src="icon.png" alt=""><div><b>CADCAST</b><br><span>students → teacher</span></div>
+  <nav><a href="#how">How it works</a><a href="#setup">Setup</a><a href="https://github.com/gunnitynes/CADCAST">GitHub</a></nav></header>
 
 <h1>Hear every student’s session <em>without AirDrop.</em></h1>
 <p class="lede">Students send whatever their DAW is playing straight to the teacher’s Mac over the classroom Wi‑Fi.
 The teacher clicks a name and listens. Nothing to install for students, stereo at 320 kb/s, about 50 ms behind.
 The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
 <div class="cta">
-  <a class="btn primary" href="https://github.com/gunnitynes/CBack/archive/refs/heads/main.zip">Download for Mac</a>
-  <a class="btn" href="https://github.com/gunnitynes/CBack">View source</a>
+  <a class="btn primary" href="https://github.com/gunnitynes/CADCAST/archive/refs/heads/main.zip">Download for Mac</a>
+  <a class="btn" href="https://github.com/gunnitynes/CADCAST">View source</a>
 </div>
 
 <figure class="shot"><img src="desk.png" alt="The teacher's desk: student tiles with live meters, one being listened to, one with a raised hand"></figure>
@@ -57,7 +57,7 @@ The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
 
 <h2 id="how">How it works</h2>
 <div class="grid">
-  <div class="card"><div class="n">01</div><h3>Open the desk</h3><p>Click CBACK in the Dock. Chrome opens the desk; project the link and QR code.</p></div>
+  <div class="card"><div class="n">01</div><h3>Open the desk</h3><p>Click CADCAST in the Dock. Chrome opens the desk; project the link and QR code.</p></div>
   <div class="card"><div class="n">02</div><h3>Students join</h3><p>They scan, type a name, press Join, and press <b>Start broadcast</b> when they want to be heard. They stay muted until then.</p></div>
   <div class="card"><div class="n">03</div><h3>Click to listen</h3><p>Click a tile to hear that student, ⇧‑click for several, 1–9 to jump, H for the next raised hand.</p></div>
 </div>
@@ -76,8 +76,8 @@ The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
 
 <h2 id="setup">Setup</h2>
 <div class="grid">
-  <div class="card"><h3>Teacher’s Mac</h3><p>Download, unzip to <code>~/CBack</code>, and drag <code>CBACK.app</code> to the Dock. First launch: right‑click → Open, allow incoming connections, allow the microphone once (used only to name output devices). Needs Python 3 (built into macOS) and Chrome.</p></div>
-  <div class="card"><h3>Student laptops</h3><p>Install <a href="https://existential.audio/blackhole/">BlackHole 2ch</a>. Make a Multi‑Output Device (headphones + BlackHole) and set it as the DAW’s output, so they still hear themselves. On the CBACK page pick <b>BlackHole 2ch</b>, not the Aggregate.</p></div>
+  <div class="card"><h3>Teacher’s Mac</h3><p>Download, unzip to <code>~/CADCAST</code>, and drag <code>CADCAST.app</code> to the Dock. First launch: right‑click → Open, allow incoming connections, allow the microphone once (used only to name output devices). Needs Python 3 (built into macOS) and Chrome.</p></div>
+  <div class="card"><h3>Student laptops</h3><p>Install <a href="https://existential.audio/blackhole/">BlackHole 2ch</a>. Make a Multi‑Output Device (headphones + BlackHole) and set it as the DAW’s output, so they still hear themselves. On the CADCAST page pick <b>BlackHole 2ch</b>, not the Aggregate.</p></div>
   <div class="card"><h3>First visit</h3><p>Chrome warns “not private” because the link is https with the teacher Mac’s own certificate: <b>Advanced → Proceed</b>, once. Browsers only allow audio capture on secure pages.</p></div>
 </div>
 <p class="note">Everyone must be on the same network. School Wi‑Fi that isolates devices blocks it; a travel router or phone hotspot fixes that.</p>
@@ -91,5 +91,5 @@ The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
   <tr><td>Ports</td><td>8090 (desk) · 8091 (students, https). Runs alongside CCAST (8080 / 8443).</td></tr>
 </table>
 
-<footer>CBACK · made for music production classes · <a href="https://github.com/gunnitynes/CBack">github.com/gunnitynes/CBack</a></footer>
+<footer>CADCAST · made for music production classes · <a href="https://github.com/gunnitynes/CADCAST">github.com/gunnitynes/CADCAST</a></footer>
 </div></body></html>

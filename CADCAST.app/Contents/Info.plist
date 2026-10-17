@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>CFBundleName</key><string>CBACK</string>
-  <key>CFBundleDisplayName</key><string>CBACK</string>
-  <key>CFBundleIdentifier</key><string>local.gunnar.cback</string>
+  <key>CFBundleName</key><string>CADCAST</string>
+  <key>CFBundleDisplayName</key><string>CADCAST</string>
+  <key>CFBundleIdentifier</key><string>local.gunnar.cadcast</string>
   <key>CFBundleVersion</key><string>1.0</string>
   <key>CFBundleShortVersionString</key><string>1.0</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleExecutable</key><string>CBACK</string>
-  <key>CFBundleIconFile</key><string>CBACK</string>
+  <key>CFBundleExecutable</key><string>CADCAST</string>
+  <key>CFBundleIconFile</key><string>CADCAST</string>
   <key>LSMinimumSystemVersion</key><string>12.0</string>
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>

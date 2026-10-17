@@ -1,0 +1,40 @@
+#!/bin/bash
+# CADCAST launcher (CCAST in reverse). Click once to start (opens the teacher's desk in Chrome);
+# click again while running to open the desk or stop the server.
+DIR="$(cd "$(dirname "$0")/../../.." && pwd)"          # the folder holding CADCAST.app
+[ -f "$DIR/cadcast.py" ] || DIR="$HOME/CADCAST"              # app moved elsewhere (e.g. /Applications)
+PIDF="$DIR/.cadcast.pid"; PORTF="$DIR/.cadcast.port"
+say() { osascript -e "display notification \"$1\" with title \"CADCAST\""; }
+fail() { osascript -e "display alert \"CADCAST\" message \"$1\" as critical"; exit 1; }
+[ -f "$DIR/cadcast.py" ] || fail "Cannot find cadcast.py. Keep CADCAST.app in the CADCAST folder (or the folder at ~/CADCAST)."
+
+running() { local pid; pid="$(cat "$PIDF" 2>/dev/null)"; [ -n "$pid" ] && ps -p "$pid" -o command= 2>/dev/null | grep -q "cadcast.py"; }
+# Any CADCAST server the pid file doesn't know about (e.g. after the file was lost) would keep the student
+# port and serve an old version, pushing a new server onto other ports. Stop strays before starting.
+stop_strays() { pkill -f "cadcast.py --daemon" 2>/dev/null; sleep 0.5; }
+
+if running; then
+  PORT="$(cat "$PORTF" 2>/dev/null || echo 8090)"
+  CHOICE=$(osascript -e 'display dialog "CADCAST is running." buttons {"Stop CADCAST", "Open desk"} default button "Open desk" with title "CADCAST" with icon POSIX file "'"$DIR"'/CADCAST.app/Contents/Resources/CADCAST.icns"' -e 'button returned of result' 2>/dev/null)
+  if [ "$CHOICE" = "Stop CADCAST" ]; then
+    stop_strays; rm -f "$PIDF" "$PORTF"; say "Stopped."
+  elif [ -n "$CHOICE" ]; then
+    open -a "Google Chrome" "http://localhost:$PORT/desk" 2>/dev/null || open "http://localhost:$PORT/desk"
+  fi
+  exit 0
+fi
+stop_strays; rm -f "$PIDF" "$PORTF"
+
+for PY in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3 "$(command -v python3)"; do
+  [ -n "$PY" ] && "$PY" -c "import sys; sys.exit(sys.version_info < (3, 8))" 2>/dev/null && break
+  PY=""
+done
+[ -n "$PY" ] || fail "Python 3 was not found. Open Terminal once and run: xcode-select --install"
+
+cd "$DIR" && "$PY" cadcast.py --daemon
+for i in 1 2 3 4 5 6 7 8 9 10; do sleep 0.5; running && break; done
+if running; then
+  say "Live. Students: https://$(ipconfig getifaddr en0 2>/dev/null || echo "<this Mac>"):$(( $(cat "$PORTF" 2>/dev/null || echo 8090) + 1 ))"
+else
+  fail "CADCAST could not start. See $DIR/cadcast.log"
+fi

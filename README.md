@@ -1,13 +1,13 @@
-# CBACK — CCAST in reverse: students' audio to the teacher's desk
+# CADCAST — CCAST in reverse: students' audio to the teacher's desk
 
-**Page:** https://gunnitynes.github.io/CBack/ · sibling of [CCAST](https://github.com/gunnitynes/ClassCast)
+**Page:** https://gunnitynes.github.io/CADCAST/ · sibling of [CCAST](https://github.com/gunnitynes/ClassCast)
 
 Students send what their DAW is playing to your Mac so you can listen to their work
 without AirDrop. Nothing to install for them. One Python file, a Dock app, works offline.
 Stereo, 48 kHz Opus at 320 kb/s with no speech processing (CCAST's recipe), about 50 ms delay.
 
 ## Every class
-1. Click **CBACK** in the Dock. Chrome opens **the desk**. (First time only: allow Python to accept
+1. Click **CADCAST** in the Dock. Chrome opens **the desk**. (First time only: allow Python to accept
    incoming connections, and allow the microphone once. The desk uses that permission to name your
    output devices. It records nothing.)
 2. **⛶ Projector** shows the student link + QR: `https://<this-mac>:8091`.
@@ -36,7 +36,7 @@ Chrome captures **channels 1–2 of the device the student picks**, so the page 
 - DAW output → a device that includes BlackHole: a **Multi-Output Device** (headphones/interface + BlackHole 2ch,
   drift correction on BlackHole) mirrors the master into both, so the student still hears themselves.
   An **Aggregate** works too if the master goes to BlackHole's channels.
-- On the CBACK page, *Send from* = **BlackHole 2ch** (not the Aggregate: its channels 1–2 are usually the
+- On the CADCAST page, *Send from* = **BlackHole 2ch** (not the Aggregate: its channels 1–2 are usually the
   interface, and the page warns about this).
 - The page warns "No signal" after 6 s of silence.
 
@@ -45,15 +45,15 @@ Browsers only allow audio capture on secure pages, so the student link is https 
 self-signed certificate. The desk itself runs on `http://localhost:8090/desk` and only opens on this Mac.
 
 ## Runs next to CCAST
-Different ports (CBACK 8090/8091, CCAST 8080/8443), so both can run in the same class.
+Different ports (CADCAST 8090/8091, CCAST 8080/8443), so both can run in the same class.
 
 ## If something's off
 - A student stays "Waiting for the teacher": is the desk open? Same Wi‑Fi? (School networks that isolate
   clients block CCAST too; a travel router / hotspot fixes both.)
 - A student is "On the desk" but silent: their meters on your tile show it. Usually the DAW isn't playing into BlackHole.
 - Only one desk tab: opening a second one makes the older one step down.
-- Log: `cback.log` · Terminal: `python3 ~/CBack/cback.py`
+- Log: `cadcast.log` · Terminal: `python3 ~/CADCAST/cadcast.py`
 
 ## Files
-- `CBACK.app`: launcher (keep it here, or leave the folder at ~/CBack) · click again while running to open/stop
-- `cback.py`: server + both pages · `qrcode.min.js`: QR library (MIT)
+- `CADCAST.app`: launcher (keep it here, or leave the folder at ~/CADCAST) · click again while running to open/stop
+- `cadcast.py`: server + both pages · `qrcode.min.js`: QR library (MIT)

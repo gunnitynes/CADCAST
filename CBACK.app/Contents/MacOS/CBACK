@@ -9,18 +9,21 @@ fail() { osascript -e "display alert \"CBACK\" message \"$1\" as critical"; exit
 [ -f "$DIR/cback.py" ] || fail "Cannot find cback.py. Keep CBACK.app in the CBack folder (or the folder at ~/CBack)."
 
 running() { local pid; pid="$(cat "$PIDF" 2>/dev/null)"; [ -n "$pid" ] && ps -p "$pid" -o command= 2>/dev/null | grep -q "cback.py"; }
+# Any CBACK server the pid file doesn't know about (e.g. after the file was lost) would keep the student
+# port and serve an old version, pushing a new server onto other ports. Stop strays before starting.
+stop_strays() { pkill -f "cback.py --daemon" 2>/dev/null; sleep 0.5; }
 
 if running; then
   PORT="$(cat "$PORTF" 2>/dev/null || echo 8090)"
   CHOICE=$(osascript -e 'display dialog "CBACK is running." buttons {"Stop CBACK", "Open desk"} default button "Open desk" with title "CBACK" with icon POSIX file "'"$DIR"'/CBACK.app/Contents/Resources/CBACK.icns"' -e 'button returned of result' 2>/dev/null)
   if [ "$CHOICE" = "Stop CBACK" ]; then
-    kill "$(cat "$PIDF")" 2>/dev/null; sleep 0.5; rm -f "$PIDF" "$PORTF"; say "Stopped."
+    stop_strays; rm -f "$PIDF" "$PORTF"; say "Stopped."
   elif [ -n "$CHOICE" ]; then
     open -a "Google Chrome" "http://localhost:$PORT/desk" 2>/dev/null || open "http://localhost:$PORT/desk"
   fi
   exit 0
 fi
-rm -f "$PIDF" "$PORTF"
+stop_strays; rm -f "$PIDF" "$PORTF"
 
 for PY in /opt/homebrew/bin/python3 /usr/local/bin/python3 /usr/bin/python3 "$(command -v python3)"; do
   [ -n "$PY" ] && "$PY" -c "import sys; sys.exit(sys.version_info < (3, 8))" 2>/dev/null && break

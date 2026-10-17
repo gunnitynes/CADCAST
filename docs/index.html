@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CBACK</title>
+<meta name="description" content="Students send their DAW's audio to the teacher's Mac over the classroom Wi-Fi. No installs, no AirDrop.">
+<link rel="icon" href="icon.png">
+<style>
+:root{--bg:#07080b;--card:#12151c;--line:#1f242e;--fg:#f4f5f7;--dim:#8b93a3;--mute:#5a6170;--live:#39ff88;--wait:#ffb340;--air:#ff2d55}
+*{box-sizing:border-box}html{color-scheme:dark}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#1d1418 0%,var(--bg) 60%);color:var(--fg);
+ font:17px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Segoe UI,Roboto,sans-serif;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1040px;margin:0 auto;padding:28px 16px 80px}
+code,.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;font-size:.92em}
+code{background:#151922;border:1px solid var(--line);padding:1px 6px;border-radius:6px}
+a{color:var(--live)}
+header{display:flex;align-items:center;gap:14px;margin-bottom:56px}
+header img{width:44px;height:44px}
+header b{font-weight:900;letter-spacing:.16em;font-size:20px}header span{color:var(--dim);font-size:14px}
+header nav{margin-left:auto;display:flex;gap:18px;font-size:15px}header nav a{color:var(--dim);text-decoration:none}header nav a:hover{color:var(--fg)}
+h1{font-size:clamp(34px,6vw,60px);line-height:1.05;letter-spacing:-.035em;margin:0 0 18px;max-width:14em}
+h1 em{font-style:normal;color:var(--air)}
+.lede{font-size:clamp(17px,2.2vw,21px);color:var(--dim);max-width:36em;margin:0 0 30px}
+.cta{display:flex;gap:12px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:10px;padding:15px 22px;border-radius:14px;font-weight:700;text-decoration:none;background:#222736;color:var(--fg)}
+.btn.primary{background:var(--air);color:#fff;box-shadow:0 0 30px rgba(255,45,85,.35)}
+.shot{margin:56px 0 0;border-radius:18px;overflow:hidden;border:1px solid var(--line);box-shadow:0 30px 80px rgba(0,0,0,.5)}
+.shot img{display:block;width:100%;height:auto}
+figcaption{color:var(--mute);font-size:14px;margin-top:10px}
+h2{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);margin:80px 0 20px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:18px;padding:22px}
+.card h3{margin:0 0 6px;font-size:18px;letter-spacing:-.01em}.card p{margin:0;color:var(--dim);font-size:15px}
+.card .n{font-size:12px;font-weight:800;color:var(--air);letter-spacing:.12em;margin-bottom:10px}
+.two{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:40px;align-items:center}
+@media(max-width:760px){.two{grid-template-columns:1fr}header nav{display:none}}
+.two img{width:100%;max-width:420px;border-radius:18px;border:1px solid var(--line);display:block;margin:0 auto}
+ol.steps{padding-left:22px;margin:0}ol.steps li{margin:10px 0;color:var(--dim)}ol.steps li b{color:var(--fg)}
+.note{border-left:3px solid var(--wait);padding:4px 0 4px 16px;color:var(--dim);font-size:15px;margin-top:22px}
+table{width:100%;border-collapse:collapse;font-size:15px}td{padding:10px 0;border-bottom:1px solid var(--line);vertical-align:top}td:first-child{color:var(--dim);width:38%;padding-right:16px}
+footer{margin-top:80px;color:var(--mute);font-size:14px;border-top:1px solid var(--line);padding-top:20px}
+</style></head><body><div class="wrap">
+
+<header><img src="icon.png" alt=""><div><b>CBACK</b><br><span>students → teacher</span></div>
+  <nav><a href="#how">How it works</a><a href="#setup">Setup</a><a href="https://github.com/gunnitynes/CBack">GitHub</a></nav></header>
+
+<h1>Hear every student’s session <em>without AirDrop.</em></h1>
+<p class="lede">Students send whatever their DAW is playing straight to the teacher’s Mac over the classroom Wi‑Fi.
+The teacher clicks a name and listens. Nothing to install for students, stereo at 320 kb/s, about 50 ms behind.
+The reverse of <a href="https://github.com/gunnitynes/ClassCast">CCAST</a>.</p>
+<div class="cta">
+  <a class="btn primary" href="https://github.com/gunnitynes/CBack/archive/refs/heads/main.zip">Download for Mac</a>
+  <a class="btn" href="https://github.com/gunnitynes/CBack">View source</a>
+</div>
+
+<figure class="shot"><img src="desk.png" alt="The teacher's desk: student tiles with live meters, one being listened to, one with a raised hand"></figure>
+<figcaption>The teacher’s desk. Every student has live meters; red = listening, amber = raised hand.</figcaption>
+
+<h2 id="how">How it works</h2>
+<div class="grid">
+  <div class="card"><div class="n">01</div><h3>Open the desk</h3><p>Click CBACK in the Dock. Chrome opens the desk; project the link and QR code.</p></div>
+  <div class="card"><div class="n">02</div><h3>Students join</h3><p>They scan, type a name, press Join. Their DAW plays into BlackHole; the page sends BlackHole.</p></div>
+  <div class="card"><div class="n">03</div><h3>Click to listen</h3><p>Click a tile to hear that student, ⇧‑click for several, 1–9 to jump, H for the next raised hand.</p></div>
+</div>
+
+<h2>The student’s side</h2>
+<div class="two">
+  <div><ol class="steps">
+    <li><b>Name + Join.</b> BlackHole 2ch is picked automatically when present.</li>
+    <li><b>Meters</b> show what’s being sent, and warn when there’s no signal or the wrong device is picked.</li>
+    <li><b>✋ Ask teacher to listen</b> raises a hand on the desk.</li>
+    <li>A red <b>TEACHER LISTENING</b> light comes on while the teacher listens. Audio only leaves the laptop then; the rest of the time only a meter does.</li>
+    <li><b>Pause</b> takes them off the desk at any time.</li></ol></div>
+  <img src="student.png" alt="Student page while the teacher is listening">
+</div>
+
+<h2 id="setup">Setup</h2>
+<div class="grid">
+  <div class="card"><h3>Teacher’s Mac</h3><p>Download, unzip to <code>~/CBack</code>, and drag <code>CBACK.app</code> to the Dock. First launch: right‑click → Open, allow incoming connections, allow the microphone once (used only to name output devices). Needs Python 3 (built into macOS) and Chrome.</p></div>
+  <div class="card"><h3>Student laptops</h3><p>Install <a href="https://existential.audio/blackhole/">BlackHole 2ch</a>. Make a Multi‑Output Device (headphones + BlackHole) and set it as the DAW’s output, so they still hear themselves. On the CBACK page pick <b>BlackHole 2ch</b>, not the Aggregate.</p></div>
+  <div class="card"><h3>First visit</h3><p>Chrome warns “not private” because the link is https with the teacher Mac’s own certificate: <b>Advanced → Proceed</b>, once. Browsers only allow audio capture on secure pages.</p></div>
+</div>
+<p class="note">Everyone must be on the same network. School Wi‑Fi that isolates devices blocks it; a travel router or phone hotspot fixes that.</p>
+
+<h2>Details</h2>
+<table>
+  <tr><td>Audio</td><td>Stereo Opus, 48 kHz, 320 kb/s, echo cancellation / noise suppression / AGC off</td></tr>
+  <tr><td>Delay</td><td>≈ 50 ms on a good LAN (WebRTC, peer‑to‑peer, ~40 ms jitter buffer)</td></tr>
+  <tr><td>Server</td><td>One Python file, standard library only; only a tiny signalling mailbox, no audio passes through it</td></tr>
+  <tr><td>Privacy</td><td>The desk opens only on the teacher’s Mac; students can’t listen to each other. Works offline.</td></tr>
+  <tr><td>Ports</td><td>8090 (desk) · 8091 (students, https). Runs alongside CCAST (8080 / 8443).</td></tr>
+</table>
+
+<footer>CBACK · made for music production classes · <a href="https://github.com/gunnitynes/CBack">github.com/gunnitynes/CBack</a></footer>
+</div></body></html>

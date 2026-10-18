@@ -98,7 +98,7 @@ function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
   peer.on('error',e=>{
     if(e.type==='unavailable-id'){pcId=localStorage.cc_pc=rnd()+rnd().slice(0,4);drawQR();setTimeout(startPeer,300);return;}   // this code is open in another tab
     if(e.type==='peer-unavailable'){if(/controlroom-lobby-/.test(e.message||'')){if(!room){room='';drawQR();}return;}
-      status='Waiting for the teacher’s patch bay…';desk=null;ui();if(want){clearTimeout(deskT);deskT=setTimeout(connectDesk,3000);}return;}
+      status='You’re paired. Waiting for the teacher to open the Mixer in Control Room…';desk=null;ui();if(want){clearTimeout(deskT);deskT=setTimeout(connectDesk,3000);}return;}
     if(['network','server-error','socket-error','socket-closed','disconnected'].includes(e.type)){status='Reconnecting…';ui();setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){startPeer();}},2000);}});
   peer.on('disconnected',()=>{setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){}},1500);});}
 
@@ -125,12 +125,12 @@ function connectDesk(){clearTimeout(deskT);if(!want||!pair)return;if(!peer||peer
   const d=peer.connect(pair.desk,{serialization:'json',reliable:true});desk=d;status='Connecting to the teacher’s patch bay…';ui();
   d.on('open',()=>{if(desk!==d)return;status='';offer();});
   d.on('data',m=>{if(desk===d)onDesk(m);});
-  d.on('close',()=>{if(desk!==d)return;desk=null;if(want){status='Waiting for the teacher’s patch bay…';ui();deskT=setTimeout(connectDesk,2500);}});
+  d.on('close',()=>{if(desk!==d)return;desk=null;if(want){status='You’re paired. Waiting for the teacher to open the Mixer in Control Room…';ui();deskT=setTimeout(connectDesk,2500);}});
   d.on('error',()=>{});}
 async function onDesk(m){if(!m)return;
   if(m.type==='answer'&&pc&&m.cid===cid&&!answered){answered=true;await pc.setRemoteDescription({type:'answer',sdp:m.sdp});ui();}
   else if(m.type==='desk-hello')offer();
-  else if(m.type==='denied'){forget('The patch bay doesn’t know this computer yet. Scan the code with your phone again.');}}
+  else if(m.type==='denied'){status='The teacher’s Mixer doesn’t have this computer yet. It must be opened from Control Room on the teacher’s Mac. Trying again…';ui();try{desk.close();}catch(e){}desk=null;clearTimeout(deskT);deskT=setTimeout(connectDesk,5000);}}
 function teardown(){if(pc){pc.onconnectionstatechange=null;pc.close();}pc=null;cid=null;}
 async function offer(){clearTimeout(retryT);if(!want||!track||!desk||!desk.open)return;teardown();answered=false;
   const p=new RTCPeerConnection({iceServers:[]});pc=p;cid=rnd();

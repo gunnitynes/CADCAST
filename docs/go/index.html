@@ -1,0 +1,212 @@
+<!doctype html><html lang="en"><head><meta charset=utf-8><title>CADCAST</title>
+<meta name=viewport content="width=device-width,initial-scale=1"><link rel=icon href="../icon.png">
+<style>
+:root{
+  --bg:#07080b;--card:#12151c;--line:#1f242e;--fg:#f4f5f7;--dim:#8b93a3;--mute:#5a6170;
+  --live:#39ff88;--wait:#ffb340;--off:#ff4d5e;--air:#ff2d55;--ink:#062a15;--radius:22px;--shadow:0 20px 60px rgba(0,0,0,.45);
+}
+*{box-sizing:border-box}html{color-scheme:dark}
+body{margin:0;background:radial-gradient(1200px 600px at 50% -10%,#141a26 0%,var(--bg) 60%);color:var(--fg);
+ font:17px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",Inter,Segoe UI,Roboto,sans-serif;min-height:100vh;-webkit-font-smoothing:antialiased}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace}
+header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:6px 0 18px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:12px}
+.logo{width:34px;height:34px;border-radius:10px;background:linear-gradient(135deg,#1fd1ff,var(--live));display:grid;place-items:center;color:#031;flex:none}
+.logo svg{width:20px;height:20px}
+.stname{font-weight:900;letter-spacing:.16em;font-size:18px}.sttag{color:var(--dim);font-size:13px;letter-spacing:.06em}
+.pill{display:inline-flex;align-items:center;gap:8px;padding:8px 14px;border-radius:999px;background:var(--card);border:1px solid var(--line);color:var(--dim);font-weight:600;font-size:14px;white-space:nowrap}
+.pill b{color:var(--fg);font-size:18px;font-variant-numeric:tabular-nums}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--mute);flex:none}
+.dot.live{background:var(--live);animation:pulse 1.6s infinite}.dot.air{background:var(--air);animation:pulse-air 1.6s infinite}
+@keyframes pulse-air{0%{box-shadow:0 0 0 0 rgba(255,45,85,.6)}100%{box-shadow:0 0 0 12px rgba(255,45,85,0)}}.dot.wait{background:var(--wait)}.dot.off{background:var(--off)}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(57,255,136,.55)}100%{box-shadow:0 0 0 12px rgba(57,255,136,0)}}
+.card{background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:var(--radius);padding:24px;box-shadow:var(--shadow)}
+label{display:block;font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--dim);font-weight:700;margin:18px 0 8px}
+button{font:inherit;font-weight:700;border:0;border-radius:14px;padding:14px 20px;cursor:pointer;background:#222736;color:var(--fg);transition:transform .08s,filter .15s}
+button:hover{filter:brightness(1.12)}button:active{transform:translateY(1px)}button:disabled{opacity:.35;cursor:default;filter:none}
+button.ghost,a.ghost{background:transparent;border:1px solid var(--line);color:var(--dim)}
+a.btnlink{font-weight:700;border-radius:14px;padding:14px 20px;text-decoration:none;display:inline-block}a.btnlink:hover{color:var(--fg)}
+select,input[type=text]{font:inherit;width:100%;padding:13px 14px;border-radius:14px;background:#0b0d12;color:var(--fg);border:1px solid var(--line)}
+select{appearance:none}
+input[type=range]{accent-color:var(--live)}
+.qr{background:#fff;padding:12px;border-radius:16px;line-height:0;flex:none}
+.qr img,.qr canvas{display:block;width:170px;height:170px}
+.err{display:none;margin-top:14px;padding:12px 14px;border-radius:12px;background:rgba(255,77,94,.1);border:1px solid rgba(255,77,94,.35);color:#ffb3ba;font-size:14px}
+.hint{color:var(--dim);font-size:14px}.hint b{color:var(--fg)}
+.onair{padding:10px 18px;border-radius:12px;border:2px solid #3a1a1f;background:#1a0c0f;color:#6b2a33;font-weight:900;letter-spacing:.22em;font-size:13px;transition:.25s;white-space:nowrap}
+.onair.on{border-color:var(--air);background:var(--air);color:#fff;box-shadow:0 0 24px rgba(255,45,85,.7),0 0 60px rgba(255,45,85,.35);animation:glow 2.4s ease-in-out infinite}
+@keyframes glow{50%{box-shadow:0 0 12px rgba(255,45,85,.5),0 0 30px rgba(255,45,85,.2)}}
+/* meters */
+.m{height:10px;border-radius:5px;background:#0a0c10;border:1px solid var(--line);position:relative;overflow:hidden}
+.m i{position:absolute;inset:0;width:0;background:linear-gradient(90deg,#1fd1ff 0%,var(--live) 55%,#e9ff5c 82%,var(--off) 96%)}
+.m b{position:absolute;top:0;bottom:0;width:2px;background:#fff;left:0;opacity:.85}
+details{margin-top:20px;border-top:1px solid var(--line);padding-top:14px;color:var(--dim);font-size:14px}
+details summary{cursor:pointer;font-weight:600;list-style:none}details summary::before{content:'▸ '}details[open] summary::before{content:'▾ '}
+details ol{padding-left:20px}details li{margin:6px 0}details em{font-style:normal;color:var(--fg);font-weight:600}
+
+.plug{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:90px 16px 40px;text-align:center;position:relative}
+.plug .brand{position:absolute;top:24px;left:50%;transform:translateX(-50%)}
+.jack{--l:0;position:relative;width:min(66vw,260px);aspect-ratio:1;border-radius:50%;padding:0;background:#141821;border:2px solid #2a3040;color:var(--fg);
+ font-size:26px;font-weight:800;letter-spacing:-.01em;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;transition:background .2s,border-color .2s,color .2s}
+.jack svg{width:40px;height:40px}
+.jack .ring{position:absolute;inset:-16px;border-radius:50%;border:3px solid var(--live);opacity:0;transform:scale(calc(.95 + var(--l) * .1));transition:transform .06s linear,opacity .2s;pointer-events:none}
+.jack.wait{border-color:var(--wait);color:var(--wait)}.jack.wait .ring{border-color:var(--wait);opacity:.5;animation:breathe 1.6s ease-in-out infinite}
+.jack.on{background:var(--live);border-color:var(--live);color:var(--ink);box-shadow:0 0 calc(24px + var(--l) * 70px) rgba(57,255,136,calc(.2 + var(--l) * .5))}
+.jack.on .ring{opacity:calc(.2 + var(--l) * .8)}
+@keyframes breathe{50%{transform:scale(1.06);opacity:.12}}
+.plug .sub{color:var(--dim);font-size:15px;min-height:22px}.plug .dev{color:var(--mute);font-size:12px;min-height:16px}
+.plug .err{max-width:420px}
+
+.go{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:90px 20px 40px;text-align:center;position:relative}
+.go .brand{position:absolute;top:24px;left:50%;transform:translateX(-50%)}
+.pairbox{display:grid;grid-template-columns:auto minmax(0,1fr);gap:44px;align-items:center;max-width:1000px;text-align:left}
+.pairbox .qr{background:#fff;padding:18px;border-radius:20px;box-shadow:0 0 60px rgba(57,255,136,.18)}
+.pairbox .qr img,.pairbox .qr canvas{display:block;width:min(42vh,340px)!important;height:auto!important}
+.pairbox h1{font-size:clamp(34px,5vw,58px);line-height:1.02;letter-spacing:-.035em;margin:0 0 14px}
+.pairbox p{color:var(--dim);font-size:18px;margin:0 0 12px;max-width:30em}
+.pairbox .tip{font-size:14px;color:var(--mute);border-left:3px solid var(--wait);padding-left:12px}
+.who{font-size:clamp(44px,8vw,96px);font-weight:900;letter-spacing:-.04em;line-height:.95;max-width:92vw;overflow-wrap:anywhere}
+.whoLab{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-bottom:-14px}
+.again{background:transparent;border:1px solid var(--line);color:var(--dim);padding:9px 14px;border-radius:10px;font-size:14px}
+.live{display:flex;flex-direction:column;align-items:center;gap:22px}
+[hidden]{display:none!important}
+@media(max-width:760px){.pairbox{grid-template-columns:1fr;text-align:center;justify-items:center}}
+</style></head><body>
+<div class="go plug">
+  <div class=brand><div class=logo><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M4 12h1M8 8v8M12 4v16M16 8v8M20 12h1"/></svg></div><div class=stname>CADCAST</div></div>
+  <section class=pairbox id=pairview hidden>
+    <div class=qr id=qr></div>
+    <div><h1>Scan this with your phone</h1>
+      <p>Use your phone’s camera, with the phone you joined Control Room on. This computer takes your name and plugs into the teacher’s patch bay by itself.</p>
+      <p class=tip>Before you scan: play your DAW into <b>BlackHole</b> (a Multi-Output Device with your headphones and BlackHole 2ch).</p></div>
+  </section>
+  <section class=live id=liveview hidden>
+    <div class=whoLab>This computer is</div><div class=who id=who></div>
+    <button class=jack id=jack><span class=ring></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8zM12 18v4"/></svg>
+      <span id=lbl>Connect</span></button>
+    <div class=sub id=sub></div><div class=dev id=dev></div>
+    <button class=again id=again>Not you? Show the code again</button>
+  </section>
+  <div class=err id=err></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="../qrcode.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const rnd=()=>Math.random().toString(36).slice(2,10);
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+class Signal{
+  constructor(id,extra){this.id=id;this.extra=extra||'';this.q=Promise.resolve();this.after=0;this.gen=null;this.online=null;this.dead=false;
+    this.onmsg=async()=>{};this.onreset=()=>{};this.onoffline=()=>{};this.onstale=()=>{};}
+  send(to,data){this.q=this.q.then(()=>this._post({from:this.id,to,data})).catch(()=>{});return this.q;}
+  async _post(body){for(let i=0;i<4;i++){try{const r=await fetch('/api/msg',{method:'POST',body:JSON.stringify(body)});if(r.ok)return;}catch(e){}await sleep(250*(i+1));}}
+  async run(){for(;;){if(this.dead)return;try{
+    const ctl=new AbortController();const t=setTimeout(()=>ctl.abort(),40000);
+    const r=await fetch(`/api/poll?id=${this.id}&after=${this.after}${this.extra}`,{signal:ctl.signal,cache:'no-store'});clearTimeout(t);
+    if(!r.ok)throw new Error(r.status);const {gen,msgs,stale}=await r.json();
+    if(stale){this.dead=true;this.onstale();return;}
+    const restarted=this.gen!==null&&gen!==this.gen;const backOnline=this.online===false;
+    this.gen=gen;this.online=true;if(restarted)this.after=0;
+    if(restarted||backOnline)this.onreset();
+    for(const m of msgs){this.after=Math.max(this.after,m.seq);try{await this.onmsg(m.from,m.data);}catch(e){console.warn('msg',e);}}
+  }catch(e){if(this.online!==false){this.online=false;this.onoffline();}await sleep(1500);}}}
+}
+// Opus tuned for music (CCAST's recipe): full-band stereo, 320 kb/s, no DTX, in-band FEC.
+const OPUS='stereo=1;sprop-stereo=1;maxaveragebitrate=320000;maxplaybackrate=48000;sprop-maxcapturerate=48000;cbr=0;usedtx=0;useinbandfec=1';
+function stereo(sdp){const m=sdp.match(/a=rtpmap:(\d+) opus\/48000/i);if(!m)return sdp;const pt=m[1];
+  const re=new RegExp('^a=fmtp:'+pt+' (.*)$','gm');
+  if(re.test(sdp))return sdp.replace(re,(l,params)=>'a=fmtp:'+pt+' '+params.split(';').filter(kv=>!/^(stereo|sprop-stereo|maxaveragebitrate|maxplaybackrate|sprop-maxcapturerate|cbr|usedtx|useinbandfec)=/.test(kv.trim())).concat(OPUS.split(';')).join(';'));
+  return sdp.replace(new RegExp('(a=rtpmap:'+pt+' opus\\/48000[^\\r\\n]*\\r?\\n)'),'$1a=fmtp:'+pt+' '+OPUS+'\r\n');}
+// LAN only, no STUN: wait for host candidates instead of trickling them (a few ms).
+const gathered=pc=>new Promise(r=>{if(pc.iceGatheringState==='complete')return r();
+  const f=()=>{if(pc.iceGatheringState==='complete'){pc.removeEventListener('icegatheringstatechange',f);r();}};pc.addEventListener('icegatheringstatechange',f);setTimeout(r,2500);});
+const dbw=db=>Math.max(0,Math.min(100,(db+60)/60*100));   // -60..0 dBFS -> 0..100 %
+
+// CADCAST on a student's computer, no server needed: this page lives on GitHub Pages (real https, so no
+// certificate warning), the student's phone pairs it through Control Room, and the audio goes peer-to-peer
+// over the room's Wi-Fi to the teacher's patch bay. Signalling only goes through the PeerJS relay.
+const PEAK=`class P extends AudioWorkletProcessor{constructor(){super();this.n=0;this.m=[0,0];}
+process(inp){const x=inp[0];if(x&&x[0]){const R=x[1]||x[0];for(let i=0;i<x[0].length;i++){const a=Math.abs(x[0][i]),b=Math.abs(R[i]);if(a>this.m[0])this.m[0]=a;if(b>this.m[1])this.m[1]=b;}
+ this.n+=x[0].length;if(this.n>=2048){this.port.postMessage(this.m);this.m=[0,0];this.n=0;}}return true;}}registerProcessor('peak',P);`;
+const CONTROL_ROOM='https://gunnitynes.github.io/Control-Room/';
+const PAIR_HOURS=12;
+let pcId=localStorage.cc_pc||(localStorage.cc_pc=rnd()+rnd().slice(0,4));
+let pair=null;try{pair=JSON.parse(localStorage.cc_pair||'null');}catch(e){}
+if(pair&&Date.now()-pair.at>PAIR_HOURS*3600e3)pair=null;
+let peer=null,desk=null,want=false,stream=null,track=null,pc=null,cid=null,answered=false,retryT=null,deskT=null,ac=null,msrc=null,mnode=null,sink=null,lvl=0,status='';
+
+function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
+function view(){$('#pairview').hidden=!!pair;$('#liveview').hidden=!pair;if(pair)$('#who').textContent=pair.name;}
+function drawQR(){$('#qr').innerHTML='';try{new QRCode($('#qr'),{text:CONTROL_ROOM+'?pair='+pcId,width:340,height:340,correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
+function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');j.classList.toggle('on',want&&c);j.classList.toggle('wait',want&&!c);
+  $('#lbl').textContent=!want?'Connect':c?'Connected':'Connecting…';
+  $('#sub').textContent=!want?'Tap to plug in again':c?'The teacher can hear this computer':status||'Connecting to the teacher’s patch bay…';}
+
+// ---------- the relay: this computer has its own address there; Control Room's host tells it who it is
+function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
+  peer=new Peer('cadcast-pc-'+pcId,{debug:0});
+  peer.on('open',()=>{if(pair&&want&&!desk)connectDesk();});
+  peer.on('connection',c=>c.on('data',m=>{if(!m||m.t!=='paired'||!m.name||!m.desk)return;
+    pair={name:String(m.name).slice(0,40),desk:String(m.desk),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();}));
+  peer.on('error',e=>{
+    if(e.type==='unavailable-id'){pcId=localStorage.cc_pc=rnd()+rnd().slice(0,4);drawQR();setTimeout(startPeer,300);return;}   // this code is open in another tab
+    if(e.type==='peer-unavailable'){status='Waiting for the teacher’s patch bay…';desk=null;ui();if(want){clearTimeout(deskT);deskT=setTimeout(connectDesk,3000);}return;}
+    if(['network','server-error','socket-error','socket-closed','disconnected'].includes(e.type)){status='Reconnecting…';ui();setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){startPeer();}},2000);}});
+  peer.on('disconnected',()=>{setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){}},1500);});}
+
+// ---------- the input: BlackHole when it's there (else an Aggregate, else the default input), channels 1-2, no processing
+async function capture(){ac=ac||new (window.AudioContext||window.webkitAudioContext)();ac.resume().catch(()=>{});
+  if(!sink){await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([PEAK],{type:'application/javascript'})));sink=ac.createGain();sink.gain.value=0;sink.connect(ac.destination);}
+  const C=id=>({audio:{deviceId:id?{exact:id}:undefined,channelCount:{ideal:2},sampleRate:{ideal:48000},echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  let st=await navigator.mediaDevices.getUserMedia(C());
+  const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+  const pick=all.find(d=>/blackhole/i.test(d.label))||all.find(d=>/aggregate/i.test(d.label));
+  if(pick&&st.getAudioTracks()[0].getSettings().deviceId!==pick.deviceId){st.getTracks().forEach(t=>t.stop());st=await navigator.mediaDevices.getUserMedia(C(pick.deviceId));}
+  stream=st;track=st.getAudioTracks()[0];try{track.contentHint='music';}catch(e){}
+  track.onended=()=>{if(want){showErr('The input went away.');unplug();}};
+  $('#dev').textContent=track.label.replace(/\s*\(.*?\)\s*$/,'')+(pick?'':' · no BlackHole found, using this input');
+  msrc=ac.createMediaStreamSource(st);mnode=new AudioWorkletNode(ac,'peak',{numberOfInputs:1,numberOfOutputs:1,channelCount:2,channelCountMode:'explicit',channelInterpretation:'discrete'});
+  msrc.connect(mnode);mnode.connect(sink);
+  mnode.port.onmessage=e=>{const p=Math.max(e.data[0],e.data[1]);const v=p>0?Math.max(0,(20*Math.log10(p)+60)/60):0;lvl=Math.max(v,lvl*0.8);$('#jack').style.setProperty('--l',lvl.toFixed(3));};}
+function release(){if(msrc)msrc.disconnect();if(mnode){mnode.port.onmessage=null;mnode.disconnect();}msrc=mnode=null;
+  if(stream)stream.getTracks().forEach(t=>t.stop());stream=track=null;lvl=0;$('#jack').style.setProperty('--l',0);$('#dev').textContent='';}
+
+// ---------- the patch bay: a data connection for the offer/answer, then WebRTC audio directly over the LAN
+function connectDesk(){clearTimeout(deskT);if(!want||!pair)return;if(!peer||peer.disconnected||!peer.open){deskT=setTimeout(connectDesk,1500);return;}
+  if(desk)try{desk.close();}catch(e){}
+  const d=peer.connect(pair.desk,{serialization:'json',reliable:true});desk=d;status='Connecting to the teacher’s patch bay…';ui();
+  d.on('open',()=>{if(desk!==d)return;status='';offer();});
+  d.on('data',m=>{if(desk===d)onDesk(m);});
+  d.on('close',()=>{if(desk!==d)return;desk=null;if(want){status='Waiting for the teacher’s patch bay…';ui();deskT=setTimeout(connectDesk,2500);}});
+  d.on('error',()=>{});}
+async function onDesk(m){if(!m)return;
+  if(m.type==='answer'&&pc&&m.cid===cid&&!answered){answered=true;await pc.setRemoteDescription({type:'answer',sdp:m.sdp});ui();}
+  else if(m.type==='desk-hello')offer();
+  else if(m.type==='denied'){forget('The patch bay doesn’t know this computer yet. Scan the code with your phone again.');}}
+function teardown(){if(pc){pc.onconnectionstatechange=null;pc.close();}pc=null;cid=null;}
+async function offer(){clearTimeout(retryT);if(!want||!track||!desk||!desk.open)return;teardown();answered=false;
+  const p=new RTCPeerConnection({iceServers:[]});pc=p;cid=rnd();
+  const sender=p.addTransceiver(track,{direction:'sendonly',streams:[stream]}).sender;   // live the whole time it's connected
+  p.onconnectionstatechange=()=>{if(pc!==p)return;const st=p.connectionState;
+    if(st==='connected'){try{const prm=sender.getParameters();prm.encodings=prm.encodings&&prm.encodings.length?prm.encodings:[{}];prm.encodings[0].maxBitrate=320000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';sender.setParameters(prm).catch(()=>{});}catch(e){}}
+    if(st==='failed'||st==='disconnected')retryT=setTimeout(offer,st==='failed'?500:3000);
+    ui();};
+  await p.setLocalDescription(await p.createOffer());await gathered(p);if(pc!==p)return;
+  desk.send({type:'offer',cid,pc:pcId,sdp:stereo(p.localDescription.sdp),dev:$('#dev').textContent});
+  retryT=setTimeout(()=>{if(pc===p&&!answered)offer();},15000);ui();}
+
+async function plug(){want=true;showErr('');ui();
+  try{if(!track)await capture();}
+  catch(e){want=false;release();ui();return showErr(e.name==='NotAllowedError'?'Allow the microphone (the icon left of the address bar), then tap Connect. It only reads BlackHole: what your DAW plays.':'Could not open the input: '+e.message);}
+  connectDesk();}
+function unplug(){want=false;clearTimeout(retryT);clearTimeout(deskT);teardown();if(desk&&desk.open)try{desk.send({type:'bye',pc:pcId});}catch(e){}release();ui();}
+function forget(msg){unplug();pair=null;localStorage.removeItem('cc_pair');view();drawQR();showErr(msg||'');}
+$('#jack').onclick=()=>want?unplug():plug();
+$('#again').onclick=()=>forget('');
+document.addEventListener('pointerdown',()=>{if(ac&&ac.state!=='running')ac.resume();});
+addEventListener('pagehide',()=>{if(want&&desk&&desk.open)try{desk.send({type:'bye',pc:pcId});}catch(e){}});
+
+view();drawQR();startPeer();ui();
+if(pair)plug();
+</script></body></html>

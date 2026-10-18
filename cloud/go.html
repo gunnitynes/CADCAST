@@ -1,0 +1,124 @@
+<!doctype html><html lang="en"><head><meta charset=utf-8><title>CADCAST</title>
+<meta name=viewport content="width=device-width,initial-scale=1"><link rel=icon href="../icon.png">
+<style>__CSS____PLUG_CSS__
+.go{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:90px 20px 40px;text-align:center;position:relative}
+.go .brand{position:absolute;top:24px;left:50%;transform:translateX(-50%)}
+.pairbox{display:grid;grid-template-columns:auto minmax(0,1fr);gap:44px;align-items:center;max-width:1000px;text-align:left}
+.pairbox .qr{background:#fff;padding:18px;border-radius:20px;box-shadow:0 0 60px rgba(57,255,136,.18)}
+.pairbox .qr img,.pairbox .qr canvas{display:block;width:min(42vh,340px)!important;height:auto!important}
+.pairbox h1{font-size:clamp(34px,5vw,58px);line-height:1.02;letter-spacing:-.035em;margin:0 0 14px}
+.pairbox p{color:var(--dim);font-size:18px;margin:0 0 12px;max-width:30em}
+.pairbox .tip{font-size:14px;color:var(--mute);border-left:3px solid var(--wait);padding-left:12px}
+.who{font-size:clamp(44px,8vw,96px);font-weight:900;letter-spacing:-.04em;line-height:.95;max-width:92vw;overflow-wrap:anywhere}
+.whoLab{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-bottom:-14px}
+.again{background:transparent;border:1px solid var(--line);color:var(--dim);padding:9px 14px;border-radius:10px;font-size:14px}
+.live{display:flex;flex-direction:column;align-items:center;gap:22px}
+[hidden]{display:none!important}
+@media(max-width:760px){.pairbox{grid-template-columns:1fr;text-align:center;justify-items:center}}
+</style></head><body>
+<div class="go plug">
+  <div class=brand><div class=logo>__ICON__</div><div class=stname>CADCAST</div></div>
+  <section class=pairbox id=pairview hidden>
+    <div class=qr id=qr></div>
+    <div><h1>Scan this with your phone</h1>
+      <p>Use your phone’s camera, with the phone you joined Control Room on. This computer takes your name and plugs into the teacher’s patch bay by itself.</p>
+      <p class=tip>Before you scan: play your DAW into <b>BlackHole</b> (a Multi-Output Device with your headphones and BlackHole 2ch).</p></div>
+  </section>
+  <section class=live id=liveview hidden>
+    <div class=whoLab>This computer is</div><div class=who id=who></div>
+    <button class=jack id=jack><span class=ring></span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8zM12 18v4"/></svg>
+      <span id=lbl>Connect</span></button>
+    <div class=sub id=sub></div><div class=dev id=dev></div>
+    <button class=again id=again>Not you? Show the code again</button>
+  </section>
+  <div class=err id=err></div>
+</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="../qrcode.min.js"></script>
+<script>__JS_COMMON__
+// CADCAST on a student's computer, no server needed: this page lives on GitHub Pages (real https, so no
+// certificate warning), the student's phone pairs it through Control Room, and the audio goes peer-to-peer
+// over the room's Wi-Fi to the teacher's patch bay. Signalling only goes through the PeerJS relay.
+const PEAK=`__PEAK_JS__`;
+const CONTROL_ROOM='https://gunnitynes.github.io/Control-Room/';
+const PAIR_HOURS=12;
+let pcId=localStorage.cc_pc||(localStorage.cc_pc=rnd()+rnd().slice(0,4));
+let pair=null;try{pair=JSON.parse(localStorage.cc_pair||'null');}catch(e){}
+if(pair&&Date.now()-pair.at>PAIR_HOURS*3600e3)pair=null;
+let peer=null,desk=null,want=false,stream=null,track=null,pc=null,cid=null,answered=false,retryT=null,deskT=null,ac=null,msrc=null,mnode=null,sink=null,lvl=0,status='';
+
+function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
+function view(){$('#pairview').hidden=!!pair;$('#liveview').hidden=!pair;if(pair)$('#who').textContent=pair.name;}
+function drawQR(){$('#qr').innerHTML='';try{new QRCode($('#qr'),{text:CONTROL_ROOM+'?pair='+pcId,width:340,height:340,correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
+function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');j.classList.toggle('on',want&&c);j.classList.toggle('wait',want&&!c);
+  $('#lbl').textContent=!want?'Connect':c?'Connected':'Connecting…';
+  $('#sub').textContent=!want?'Tap to plug in again':c?'The teacher can hear this computer':status||'Connecting to the teacher’s patch bay…';}
+
+// ---------- the relay: this computer has its own address there; Control Room's host tells it who it is
+function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
+  peer=new Peer('cadcast-pc-'+pcId,{debug:0});
+  peer.on('open',()=>{if(pair&&want&&!desk)connectDesk();});
+  peer.on('connection',c=>c.on('data',m=>{if(!m||m.t!=='paired'||!m.name||!m.desk)return;
+    pair={name:String(m.name).slice(0,40),desk:String(m.desk),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();}));
+  peer.on('error',e=>{
+    if(e.type==='unavailable-id'){pcId=localStorage.cc_pc=rnd()+rnd().slice(0,4);drawQR();setTimeout(startPeer,300);return;}   // this code is open in another tab
+    if(e.type==='peer-unavailable'){status='Waiting for the teacher’s patch bay…';desk=null;ui();if(want){clearTimeout(deskT);deskT=setTimeout(connectDesk,3000);}return;}
+    if(['network','server-error','socket-error','socket-closed','disconnected'].includes(e.type)){status='Reconnecting…';ui();setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){startPeer();}},2000);}});
+  peer.on('disconnected',()=>{setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){}},1500);});}
+
+// ---------- the input: BlackHole when it's there (else an Aggregate, else the default input), channels 1-2, no processing
+async function capture(){ac=ac||new (window.AudioContext||window.webkitAudioContext)();ac.resume().catch(()=>{});
+  if(!sink){await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([PEAK],{type:'application/javascript'})));sink=ac.createGain();sink.gain.value=0;sink.connect(ac.destination);}
+  const C=id=>({audio:{deviceId:id?{exact:id}:undefined,channelCount:{ideal:2},sampleRate:{ideal:48000},echoCancellation:false,noiseSuppression:false,autoGainControl:false}});
+  let st=await navigator.mediaDevices.getUserMedia(C());
+  const all=(await navigator.mediaDevices.enumerateDevices()).filter(d=>d.kind==='audioinput');
+  const pick=all.find(d=>/blackhole/i.test(d.label))||all.find(d=>/aggregate/i.test(d.label));
+  if(pick&&st.getAudioTracks()[0].getSettings().deviceId!==pick.deviceId){st.getTracks().forEach(t=>t.stop());st=await navigator.mediaDevices.getUserMedia(C(pick.deviceId));}
+  stream=st;track=st.getAudioTracks()[0];try{track.contentHint='music';}catch(e){}
+  track.onended=()=>{if(want){showErr('The input went away.');unplug();}};
+  $('#dev').textContent=track.label.replace(/\s*\(.*?\)\s*$/,'')+(pick?'':' · no BlackHole found, using this input');
+  msrc=ac.createMediaStreamSource(st);mnode=new AudioWorkletNode(ac,'peak',{numberOfInputs:1,numberOfOutputs:1,channelCount:2,channelCountMode:'explicit',channelInterpretation:'discrete'});
+  msrc.connect(mnode);mnode.connect(sink);
+  mnode.port.onmessage=e=>{const p=Math.max(e.data[0],e.data[1]);const v=p>0?Math.max(0,(20*Math.log10(p)+60)/60):0;lvl=Math.max(v,lvl*0.8);$('#jack').style.setProperty('--l',lvl.toFixed(3));};}
+function release(){if(msrc)msrc.disconnect();if(mnode){mnode.port.onmessage=null;mnode.disconnect();}msrc=mnode=null;
+  if(stream)stream.getTracks().forEach(t=>t.stop());stream=track=null;lvl=0;$('#jack').style.setProperty('--l',0);$('#dev').textContent='';}
+
+// ---------- the patch bay: a data connection for the offer/answer, then WebRTC audio directly over the LAN
+function connectDesk(){clearTimeout(deskT);if(!want||!pair)return;if(!peer||peer.disconnected||!peer.open){deskT=setTimeout(connectDesk,1500);return;}
+  if(desk)try{desk.close();}catch(e){}
+  const d=peer.connect(pair.desk,{serialization:'json',reliable:true});desk=d;status='Connecting to the teacher’s patch bay…';ui();
+  d.on('open',()=>{if(desk!==d)return;status='';offer();});
+  d.on('data',m=>{if(desk===d)onDesk(m);});
+  d.on('close',()=>{if(desk!==d)return;desk=null;if(want){status='Waiting for the teacher’s patch bay…';ui();deskT=setTimeout(connectDesk,2500);}});
+  d.on('error',()=>{});}
+async function onDesk(m){if(!m)return;
+  if(m.type==='answer'&&pc&&m.cid===cid&&!answered){answered=true;await pc.setRemoteDescription({type:'answer',sdp:m.sdp});ui();}
+  else if(m.type==='desk-hello')offer();
+  else if(m.type==='denied'){forget('The patch bay doesn’t know this computer yet. Scan the code with your phone again.');}}
+function teardown(){if(pc){pc.onconnectionstatechange=null;pc.close();}pc=null;cid=null;}
+async function offer(){clearTimeout(retryT);if(!want||!track||!desk||!desk.open)return;teardown();answered=false;
+  const p=new RTCPeerConnection({iceServers:[]});pc=p;cid=rnd();
+  const sender=p.addTransceiver(track,{direction:'sendonly',streams:[stream]}).sender;   // live the whole time it's connected
+  p.onconnectionstatechange=()=>{if(pc!==p)return;const st=p.connectionState;
+    if(st==='connected'){try{const prm=sender.getParameters();prm.encodings=prm.encodings&&prm.encodings.length?prm.encodings:[{}];prm.encodings[0].maxBitrate=320000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';sender.setParameters(prm).catch(()=>{});}catch(e){}}
+    if(st==='failed'||st==='disconnected')retryT=setTimeout(offer,st==='failed'?500:3000);
+    ui();};
+  await p.setLocalDescription(await p.createOffer());await gathered(p);if(pc!==p)return;
+  desk.send({type:'offer',cid,pc:pcId,sdp:stereo(p.localDescription.sdp),dev:$('#dev').textContent});
+  retryT=setTimeout(()=>{if(pc===p&&!answered)offer();},15000);ui();}
+
+async function plug(){want=true;showErr('');ui();
+  try{if(!track)await capture();}
+  catch(e){want=false;release();ui();return showErr(e.name==='NotAllowedError'?'Allow the microphone (the icon left of the address bar), then tap Connect. It only reads BlackHole: what your DAW plays.':'Could not open the input: '+e.message);}
+  connectDesk();}
+function unplug(){want=false;clearTimeout(retryT);clearTimeout(deskT);teardown();if(desk&&desk.open)try{desk.send({type:'bye',pc:pcId});}catch(e){}release();ui();}
+function forget(msg){unplug();pair=null;localStorage.removeItem('cc_pair');view();drawQR();showErr(msg||'');}
+$('#jack').onclick=()=>want?unplug():plug();
+$('#again').onclick=()=>forget('');
+document.addEventListener('pointerdown',()=>{if(ac&&ac.state!=='running')ac.resume();});
+addEventListener('pagehide',()=>{if(want&&desk&&desk.open)try{desk.send({type:'bye',pc:pcId});}catch(e){}});
+
+view();drawQR();startPeer();ui();
+if(pair)plug();
+</script></body></html>

@@ -46,6 +46,22 @@ For when you want everyone at once, like students plugged into your console.
   everyone separately). Inputs beyond the device's channels say *no channels left*.
 - The listen desk and the patch bay run side by side; each has its own students.
 
+## Third way: paired with Control Room (no typing, no certificate warning)
+Every student computer joins under the student's own name, picked from the class list on their phone.
+1. On your Mac: open **Control Room** (gunnitynes.github.io/Control-Room) and the **paired patch bay**
+   (**☁ Paired patch bay** on the local patch bay, or gunnitynes.github.io/CADCAST/patch/) in the same Chrome.
+   The patch bay finds Control Room's room by itself.
+2. Students join Control Room on their phones as usual (scan the big screen, tap their name).
+3. On their computer they open **gunnitynes.github.io/CADCAST/go** (bookmark it once). It shows a QR code.
+4. They scan that code with the same phone. The phone says *Your computer is now <name>*, the computer picks
+   BlackHole and plugs in, and a strip with their name appears in the patch bay. Faders are remembered per name.
+- First time on each computer, Chrome asks to use the microphone (it reads BlackHole). Say Allow; it is remembered.
+- The computer remembers its pairing for 12 hours, so a reload reconnects by itself. *Not you?* shows the code again.
+- Only computers paired through Control Room are let in. Signalling goes through the free PeerJS relay that
+  Control Room uses (needs internet); the audio itself goes straight over the room's Wi-Fi, like the other ways.
+- The pages live in `docs/go` and `docs/patch`, built from `cloud/*.html` by `python3 cloud/build.py`
+  (they reuse cadcast.py's styles and audio code).
+
 ## Student setup (BlackHole)
 Chrome captures **channels 1–2 of the device the student picks**, so the page should get BlackHole itself:
 - DAW output → a device that includes BlackHole: a **Multi-Output Device** (headphones/interface + BlackHole 2ch,

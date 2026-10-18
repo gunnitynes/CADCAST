@@ -606,6 +606,7 @@ PATCH_HTML = r"""<!doctype html><html><head><meta charset=utf-8><title>CADCAST �
     <span class=vol>VOL<input type=range id=vol min=0 max=1 step=0.01></span>
     <button class=ghost id=proj>⛶ Projector</button>
     <a class="ghost btnlink" href="/desk" title="Click-to-listen desk">⇄ Listen desk</a>
+    <a class="ghost btnlink" href="https://gunnitynes.github.io/CADCAST/patch/" target=_blank title="Students pair their computers with their Control Room phones">☁ Paired patch bay</a>
   </div>
 </header>
 <div class="card share">

@@ -1,0 +1,165 @@
+<!doctype html><html lang="en"><head><meta charset=utf-8><title>CADCAST · Patch bay</title>
+<meta name=viewport content="width=device-width,initial-scale=1"><link rel=icon href="../icon.png">
+<style>__CSS____PATCH_CSS__
+.cover{position:fixed;inset:0;background:rgba(7,8,11,.92);display:none;place-items:center;text-align:center;padding:30px;z-index:50}.cover.show{display:grid}
+.cover h2{font-size:clamp(26px,4vw,40px);letter-spacing:-.02em;margin:0 0 10px}.cover p{color:var(--dim);max-width:34em;margin:0 auto}
+.golink{font-size:clamp(22px,3vw,34px);font-weight:800;letter-spacing:-.01em}
+.strip .nm{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:15px}
+</style></head><body>
+<div class=wrap>
+<header>
+  <div class=brand><div class=logo>__ICON__</div><div><div class=stname>CADCAST</div><div class=sttag>patch bay · paired with Control Room</div></div>
+    <span class=pill><span class=dot id=sdot></span><b id=count>0</b> plugged in</span>
+    <button id=start hidden>▶ Start audio</button></div>
+  <div class=tools>
+    <select id=out title="Output device"><option value="">System output</option></select>
+    <span class=seg id=mode><button data-m=mix>Stereo mix</button><button data-m=sep>Separate outputs</button></span>
+    <span class=vol>VOL<input type=range id=vol min=0 max=1 step=0.01></span>
+    <button class=ghost id=proj>⛶ Projector</button>
+  </div>
+</header>
+<div class="card share">
+  <div><h2>On each student computer</h2><div class="golink mono">gunnitynes.github.io/CADCAST/go</div>
+    <div class=hint>The computer shows a QR code. The student scans it with the phone they joined Control Room on,
+    and the computer plugs in here under their name. Nothing to type, no certificate warning.</div></div>
+  <div class=qr id=qr></div>
+</div>
+<div class=strips id=strips></div>
+<div class=foot><span id=route></span><span><b>M</b> mute · <b>S</b> solo · double-click a fader for 0 dB · faders are remembered per student</span><span id=net></span></div>
+<div class=err id=err></div>
+</div>
+<div class=cover id=cover><div><h2 id=coverH></h2><p id=coverP></p></div></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="../qrcode.min.js"></script>
+<script>__JS_COMMON__
+// The patch bay for paired computers. It lives on the same site as Control Room, so it reads Control Room's
+// room code and the list of paired computers straight from this browser (localStorage). Only computers that
+// Control Room paired with a student's phone are let in, and every strip carries that student's name.
+const users=new Map();   // pc id -> {id,num,name,dev,pc,el,src,gain,an,vol,mute,solo,peak,state,gone,outs,conn}
+const nums=new Map();    // pc id -> input number, kept while they might reconnect
+const ac=new (window.AudioContext||window.webkitAudioContext)({latencyHint:'interactive'});
+let mode=localStorage.cp_mode==='sep'?'sep':'mix',sinkId=localStorage.cp_out||'',master=+(localStorage.cp_vol||0.9),merger=null,outName='System output';
+let peer=null,code='';
+$('#vol').value=master;
+const roomCode=()=>{try{return (JSON.parse(localStorage.getItem('controlroom.room')||'null')||{}).code||'';}catch(e){return '';}};
+const allowList=()=>{try{return JSON.parse(localStorage.getItem('controlroom.cadcast.allow')||'{}');}catch(e){return {};}};
+const savedVol=n=>{const v=localStorage.getItem('cp_v_'+n);return v==null?1:+v;};
+
+function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
+function cover(h,p){$('#coverH').textContent=h;$('#coverP').textContent=p;$('#cover').classList.add('show');}
+function uncover(){$('#cover').classList.remove('show');}
+function sorted(){return [...users.values()].sort((a,b)=>a.num-b.num);}
+function audible(u){const solo=[...users.values()].some(x=>x.solo&&!x.gone);return !u.mute&&(!solo||u.solo);}
+function gains(){for(const u of users.values())if(u.gain)u.gain.gain.setTargetAtTime(audible(u)?u.vol*u.vol*master:0,ac.currentTime,0.015);}
+
+// ---------- routing: a stereo mix, or Input N -> channels 2N-1 / 2N of the output device
+function route(){const d=ac.destination;if(merger){merger.disconnect();merger=null;}
+  for(const u of users.values()){u.outs=null;if(u.gain)try{u.gain.disconnect();}catch(e){}}
+  if(mode==='mix'){d.channelCount=2;d.channelCountMode='explicit';d.channelInterpretation='speakers';for(const u of users.values())if(u.gain)u.gain.connect(d);}
+  else{const max=Math.max(2,Math.min(d.maxChannelCount||2,32));d.channelCount=max;d.channelCountMode='explicit';d.channelInterpretation='discrete';
+    merger=ac.createChannelMerger(max);merger.connect(d);
+    for(const u of users.values()){const a=(u.num-1)*2;if(a+1>=max)continue;u.outs=[a,a+1];if(!u.gain)continue;
+      const sp=ac.createChannelSplitter(2);u.gain.connect(sp);sp.connect(merger,0,a);sp.connect(merger,1,a+1);}}
+  for(const b of $('#mode').children)b.classList.toggle('on',b.dataset.m===mode);
+  const max=ac.destination.maxChannelCount||2;
+  $('#route').innerHTML=mode==='mix'?`<b>Stereo mix</b> → ${esc(outName)}`:
+    `<b>Separate outputs</b> → ${esc(outName)} · ${Math.floor(Math.min(max,32)/2)} stereo tracks (input N on channels 2N−1 / 2N)`+(max<4?' · <span style="color:var(--wait)">pick a multichannel device (e.g. BlackHole 16ch)</span>':'');
+  sorted().forEach(paint);}
+
+// ---------- strips
+function makeStrip(u){const el=document.createElement('div');el.className='strip';
+  el.innerHTML='<div class=nm></div><div class=out></div><div class=body><div class=vm><div class=m><i></i><b></b></div><div class=m><i></i><b></b></div></div><input type=range class=fader min=0 max=1.25 step=0.01></div><div class=db></div><div class=btns><button class=mb title=Mute>M</button><button class=sb title=Solo>S</button></div><div class=st></div>';
+  const f=el.querySelector('.fader');f.value=u.vol;
+  const keep=()=>{try{localStorage.setItem('cp_v_'+u.name,u.vol);}catch(e){}};
+  f.oninput=()=>{u.vol=+f.value;keep();gains();paint(u);};f.ondblclick=()=>{u.vol=1;f.value=1;keep();gains();paint(u);};
+  el.querySelector('.mb').onclick=()=>{u.mute=!u.mute;gains();sorted().forEach(paint);};
+  el.querySelector('.sb').onclick=()=>{u.solo=!u.solo;gains();sorted().forEach(paint);};
+  u.strip=el;u.bars=el.querySelectorAll('.m');}
+function paint(u){const el=u.strip;if(!el)return;el.querySelector('.nm').textContent=u.name;el.title=u.name+(u.dev?' · input: '+u.dev:'');
+  el.querySelector('.out').textContent=mode==='sep'?(u.outs?`→ out ${u.outs[0]+1}–${u.outs[1]+1}`:'→ no channels left'):'→ mix';
+  const db=20*Math.log10(u.vol*u.vol);el.querySelector('.db').textContent=u.vol<=0?'−∞':(db>=0?'+':'')+db.toFixed(1)+' dB';
+  el.querySelector('.mb').classList.toggle('on',u.mute);el.querySelector('.sb').classList.toggle('on',u.solo);
+  el.classList.toggle('gone',u.gone);el.classList.toggle('silent',!u.gone&&!audible(u));el.classList.toggle('live',!u.gone&&u.state==='connected');
+  el.querySelector('.st').textContent=u.gone?'unplugged':u.state==='connected'?'connected':'connecting…';}
+function render(){const list=sorted();const box=$('#strips');
+  if(!list.length)box.innerHTML='<div class=empty>Nobody plugged in yet. Students open the link above on their computer and scan its code with their phone.</div>';
+  else{const have=new Set();for(const u of list){if(!u.strip)makeStrip(u);have.add(u.strip);box.appendChild(u.strip);paint(u);}[...box.children].forEach(c=>{if(!have.has(c))c.remove();});}
+  const n=list.filter(u=>!u.gone).length;$('#count').textContent=n;$('#sdot').className='dot'+(n?' live':'');
+  document.body.classList.toggle('compact',list.length>0&&!document.body.classList.contains('projector'));}
+
+// ---------- peers: each paired computer offers, the patch bay answers
+function detach(u){if(u.src)u.src.disconnect();if(u.gain)try{u.gain.disconnect();}catch(e){}if(u.el)u.el.srcObject=null;u.src=u.gain=u.el=u.an=null;}
+function attach(u,stream,pc){for(const r of pc.getReceivers()){try{r.jitterBufferTarget=20;}catch(e){}}
+  detach(u);u.el=new Audio();u.el.muted=true;u.el.srcObject=stream;u.el.play().catch(()=>{});   // Chrome only feeds remote WebRTC audio to Web Audio while a media element holds the stream
+  u.src=ac.createMediaStreamSource(stream);u.gain=ac.createGain();u.gain.gain.value=0;u.src.connect(u.gain);
+  const sp=ac.createChannelSplitter(2);u.src.connect(sp);u.an=[0,1].map(c=>{const a=ac.createAnalyser();a.fftSize=1024;sp.connect(a,c);return a;});
+  route();gains();}
+function drop(u){if(u.pc)u.pc.close();detach(u);users.delete(u.id);nums.delete(u.id);if(u.strip)u.strip.remove();route();render();}
+async function onOffer(conn,d){const id=String(d.pc||'').slice(0,24),who=allowList()[id];
+  if(!id||!who){try{conn.send({type:'denied'});}catch(e){}return;}
+  let u=users.get(id);
+  if(!u){let num=nums.get(id);if(!num){const used=new Set([...users.values()].map(x=>x.num));num=1;while(used.has(num))num++;nums.set(id,num);}
+    u={id,num,name:who.name,vol:savedVol(who.name),mute:false,solo:false,peak:[-90,-90],state:'new',gone:false};users.set(id,u);}
+  u.name=who.name;u.conn=conn;u.dev=d.dev||'';u.gone=false;u.state='connecting';clearTimeout(u.goneT);
+  if(u.pc)u.pc.close();const pc=new RTCPeerConnection({iceServers:[]});u.pc=pc;
+  pc.ontrack=e=>attach(u,e.streams[0]||new MediaStream([e.track]),pc);
+  pc.onconnectionstatechange=()=>{if(u.pc!==pc)return;const st=pc.connectionState;u.state=st;
+    if(st==='connected'){u.gone=false;clearTimeout(u.goneT);}
+    if(st==='failed'||st==='closed'||st==='disconnected'){u.goneT=setTimeout(()=>{if(u.pc===pc&&pc.connectionState!=='connected'){u.gone=true;gains();paint(u);render();
+        u.goneT=setTimeout(()=>{if(u.gone)drop(u);},30000);}},4000);}
+    paint(u);render();};
+  await pc.setRemoteDescription({type:'offer',sdp:d.sdp});
+  await pc.setLocalDescription(await pc.createAnswer());await gathered(pc);
+  conn.send({type:'answer',cid:d.cid,sdp:stereo(pc.localDescription.sdp)});render();}
+function onData(conn,d){if(!d||typeof d!=='object')return;
+  if(d.type==='offer')onOffer(conn,d).catch(e=>console.warn('offer',e));
+  else if(d.type==='bye'){const u=users.get(String(d.pc||''));if(u)drop(u);}}
+
+// ---------- our address on the relay follows Control Room's room on this Mac
+function startPeer(){const c=roomCode();
+  if(!c){code='';if(peer){peer.destroy();peer=null;}cover('Open Control Room on this Mac first','The patch bay pairs computers through Control Room’s room. Open Control Room (gunnitynes.github.io/Control-Room) in another tab and this page connects by itself.');return;}
+  if(c===code&&peer&&!peer.destroyed)return;
+  code=c;if(peer)peer.destroy();
+  const p=new Peer('cadcast-desk-'+c.toLowerCase(),{debug:0});peer=p;
+  p.on('open',()=>{if(peer!==p)return;uncover();$('#net').textContent='paired with room '+c;});
+  p.on('connection',conn=>{conn.on('data',d=>onData(conn,d));conn.on('error',()=>{});});
+  p.on('error',e=>{if(peer!==p)return;
+    if(e.type==='unavailable-id'){code='';cover('The patch bay is already open','It is open in another tab or window. Close this one.');return;}
+    if(['network','server-error','socket-error','socket-closed'].includes(e.type)){$('#net').textContent='⚠ relay not answering, retrying';setTimeout(()=>{if(peer===p&&p.disconnected&&!p.destroyed)try{p.reconnect();}catch(x){}},2000);}});
+  p.on('disconnected',()=>{setTimeout(()=>{if(peer===p&&p.disconnected&&!p.destroyed)try{p.reconnect();}catch(x){}},1500);});}
+addEventListener('storage',e=>{if(e.key==='controlroom.room')startPeer();});
+setInterval(startPeer,4000);
+if(window.BroadcastChannel)new BroadcastChannel('cadcast').onmessage=e=>{const m=e.data||{};if(m.t==='allow'){const u=users.get(m.pc);if(u){u.name=m.name;paint(u);}}};
+
+// ---------- meters (pre-fader)
+const buf=new Float32Array(1024);
+function frame(){for(const u of users.values()){if(!u.bars)continue;for(let c=0;c<2;c++){let db=-90;
+      if(u.an&&!u.gone){u.an[c].getFloatTimeDomainData(buf);let m=0;for(let i=0;i<buf.length;i++){const v=Math.abs(buf[i]);if(v>m)m=v;}if(m>0)db=Math.max(-90,20*Math.log10(m));}
+      u.peak[c]=Math.max(db,u.peak[c]-0.6);u.bars[c].firstChild.style.height=dbw(db)+'%';u.bars[c].lastChild.style.bottom=dbw(u.peak[c])+'%';}}
+  requestAnimationFrame(frame);}
+
+// ---------- output device, mode, volume, audio start
+async function listOutputs(){try{const all=await navigator.mediaDevices.enumerateDevices();const sel=$('#out');
+  const outs=all.filter(d=>d.kind==='audiooutput'&&d.deviceId!=='default'&&d.deviceId);
+  sel.innerHTML='<option value="">System output</option>'+outs.map(d=>`<option value="${esc(d.deviceId)}">${esc(d.label||'Output')}</option>`).join('');
+  sel.value=outs.some(o=>o.deviceId===sinkId)?sinkId:'';outName=sel.options[sel.selectedIndex].text;}catch(e){}}
+async function setOut(id){sinkId=id;localStorage.cp_out=id;outName=$('#out').options[$('#out').selectedIndex]?.text||'System output';
+  try{if(ac.setSinkId)await ac.setSinkId(id);else if(id)showErr('This Chrome cannot choose an output for the patch bay; it plays on the system output.');}catch(e){showErr('Output: '+e.message);}
+  route();}
+$('#out').onchange=e=>setOut(e.target.value);
+$('#mode').onclick=e=>{const m=e.target.dataset&&e.target.dataset.m;if(!m)return;mode=m;localStorage.cp_mode=m;route();};
+$('#vol').oninput=e=>{master=+e.target.value;localStorage.cp_vol=master;gains();};
+$('#proj').onclick=()=>{document.body.classList.toggle('projector');render();};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('projector')){document.body.classList.remove('projector');render();}});
+const startBtn=()=>{$('#start').hidden=ac.state==='running';};ac.onstatechange=startBtn;
+$('#start').onclick=()=>ac.resume();document.addEventListener('pointerdown',()=>{if(ac.state!=='running')ac.resume();});
+
+(async()=>{
+  try{new QRCode($('#qr'),{text:'https://gunnitynes.github.io/CADCAST/go/',width:300,height:300,correctLevel:QRCode.CorrectLevel.M});}catch(e){}
+  try{const st=await navigator.mediaDevices.getUserMedia({audio:true});st.getTracks().forEach(t=>t.stop());}catch(e){}   // output names + plain LAN addresses
+  await listOutputs();navigator.mediaDevices.addEventListener('devicechange',listOutputs);
+  if(sinkId)await setOut(sinkId);else route();
+  ac.resume().catch(()=>{});startBtn();
+  startPeer();render();requestAnimationFrame(frame);
+})();
+</script></body></html>

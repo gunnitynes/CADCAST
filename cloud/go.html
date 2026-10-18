@@ -9,6 +9,7 @@
 .pairbox h1{font-size:clamp(34px,5vw,58px);line-height:1.02;letter-spacing:-.035em;margin:0 0 14px}
 .pairbox p{color:var(--dim);font-size:18px;margin:0 0 12px;max-width:30em}
 .pairbox .tip{font-size:14px;color:var(--mute);border-left:3px solid var(--wait);padding-left:12px}
+.pairbox .room{font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--live)}.pairbox .room.wait{color:var(--wait)}
 .who{font-size:clamp(44px,8vw,96px);font-weight:900;letter-spacing:-.04em;line-height:.95;max-width:92vw;overflow-wrap:anywhere}
 .whoLab{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-bottom:-14px}
 .again{background:transparent;border:1px solid var(--line);color:var(--dim);padding:9px 14px;border-radius:10px;font-size:14px}
@@ -38,7 +39,8 @@
   <section class=pairbox id=pairview hidden>
     <div class=qr id=qr></div>
     <div><h1>Scan this with your phone</h1>
-      <p>Use your phone’s camera, with the phone you joined Control Room on. This computer takes your name and plugs into the teacher’s patch bay by itself.</p>
+      <p>Then tap your name. That one tap signs you in everywhere: your phone joins <b>Control Room</b>, and this computer becomes yours in <b>CADCAST</b>, sending its sound to the teacher.</p>
+      <p class=room id=roomline>Looking for your class…</p>
       <p class=tip>Before you scan: play your DAW into <b>BlackHole</b> (a Multi-Output Device with your headphones and BlackHole 2ch).</p></div>
   </section>
   <section class=live id=liveview hidden>
@@ -72,7 +74,14 @@ let peer=null,desk=null,want=false,stream=null,track=null,pc=null,cid=null,answe
 
 function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
 function view(){$('#pairview').hidden=!!pair;$('#liveview').hidden=!pair;if(pair)$('#who').textContent=pair.name;}
-function drawQR(){$('#qr').innerHTML='';try{new QRCode($('#qr'),{text:CONTROL_ROOM+'?pair='+pcId,width:340,height:340,correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
+let room='';
+function drawQR(){$('#qr').innerHTML='';try{new QRCode($('#qr'),{text:CONTROL_ROOM+'?pair='+pcId+(room?'&room='+room:''),width:340,height:340,correctLevel:QRCode.CorrectLevel.M});}catch(e){}
+  const l=$('#roomline');if(l){l.textContent=room?'Class room '+room+' is open':'Waiting for the teacher to open Control Room…';l.classList.toggle('wait',!room);}}
+// which Control Room room is open right now? (the teacher's Mac answers at controlroom-lobby-<CLASS_KEY>)
+function askRoom(){const key=String(window.CLASS_KEY||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(!key||!peer||!peer.open)return;
+  const c=peer.connect('controlroom-lobby-'+key,{serialization:'json',reliable:true});const t=setTimeout(()=>{try{c.close();}catch(e){}},8000);
+  c.on('open',()=>c.send({t:'room?'}));c.on('data',m=>{clearTimeout(t);if(m&&m.t==='room'&&m.code&&m.code!==room){room=String(m.code).toUpperCase();drawQR();}try{c.close();}catch(e){}});c.on('error',()=>{});}
+setInterval(()=>{if(!pair)askRoom();},20000);
 function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');j.classList.toggle('on',want&&c);j.classList.toggle('wait',want&&!c);
   $('#lbl').textContent=!want?'Connect':c?'Connected':'Connecting…';
   $('#sub').textContent=!want?'Tap to plug in again':c?'The teacher can hear this computer':status||'Connecting to the teacher’s patch bay…';}
@@ -80,7 +89,7 @@ function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');
 // ---------- the relay: this computer has its own address there; Control Room's host tells it who it is
 function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
   peer=new Peer('cadcast-pc-'+pcId,{debug:0});
-  peer.on('open',()=>{if(pair&&want&&!desk)connectDesk();});
+  peer.on('open',()=>{askRoom();if(pair&&want&&!desk)connectDesk();});
   peer.on('connection',c=>c.on('data',m=>{if(!m)return;
     if(m.t==='mission'&&m.m)return showMission(m.m);
     if(m.t==='mission-end')return endMission(m.round);
@@ -88,7 +97,8 @@ function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
     pair={name:String(m.name).slice(0,40),desk:String(m.desk),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();}));
   peer.on('error',e=>{
     if(e.type==='unavailable-id'){pcId=localStorage.cc_pc=rnd()+rnd().slice(0,4);drawQR();setTimeout(startPeer,300);return;}   // this code is open in another tab
-    if(e.type==='peer-unavailable'){status='Waiting for the teacher’s patch bay…';desk=null;ui();if(want){clearTimeout(deskT);deskT=setTimeout(connectDesk,3000);}return;}
+    if(e.type==='peer-unavailable'){if(/controlroom-lobby-/.test(e.message||'')){if(!room){room='';drawQR();}return;}
+      status='Waiting for the teacher’s patch bay…';desk=null;ui();if(want){clearTimeout(deskT);deskT=setTimeout(connectDesk,3000);}return;}
     if(['network','server-error','socket-error','socket-closed','disconnected'].includes(e.type)){status='Reconnecting…';ui();setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){startPeer();}},2000);}});
   peer.on('disconnected',()=>{setTimeout(()=>{if(peer.disconnected&&!peer.destroyed)try{peer.reconnect();}catch(x){}},1500);});}
 

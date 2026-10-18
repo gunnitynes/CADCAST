@@ -9,6 +9,10 @@
 .pairbox h1{font-size:clamp(34px,5vw,58px);line-height:1.02;letter-spacing:-.035em;margin:0 0 14px}
 .pairbox p{color:var(--dim);font-size:18px;margin:0 0 12px;max-width:30em}
 .pairbox .tip{font-size:14px;color:var(--mute);border-left:3px solid var(--wait);padding-left:12px}
+.teach{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin:6px 0 14px}.teach label{display:grid;gap:6px;font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--dim)}
+.teach input{font-size:20px;padding:10px 12px;border-radius:10px;border:1px solid var(--line);background:#0b0d12;color:var(--fg);min-width:16em}
+.teach button{font-size:16px;font-weight:800;padding:12px 16px;border-radius:10px;border:0;background:var(--live);color:var(--ink)}
+.pairbox .room a{color:inherit;text-decoration:underline;cursor:pointer}
 .pairbox .room{font-size:14px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--live)}.pairbox .room.wait{color:var(--wait)}
 .who{font-size:clamp(44px,8vw,96px);font-weight:900;letter-spacing:-.04em;line-height:.95;max-width:92vw;overflow-wrap:anywhere}
 .whoLab{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;margin-bottom:-14px}
@@ -41,6 +45,7 @@
     <div><h1>Scan this with your phone</h1>
       <p>Then tap your name. That one tap signs you in everywhere: your phone joins <b>Control Room</b>, and this computer becomes yours in <b>CADCAST</b>, sending its sound to the teacher.</p>
       <p class=room id=roomline>Looking for your class…</p>
+      <form class=teach id=teachf><label>Your teacher’s name<input id=teachin maxlength=40 placeholder="e.g. Gunnar Tynes" autocomplete=off></label><button>Find my class</button></form>
       <p class=tip>Before you scan: play your DAW into <b>BlackHole</b> (a Multi-Output Device with your headphones and BlackHole 2ch).</p></div>
   </section>
   <section class=live id=liveview hidden>
@@ -75,10 +80,16 @@ let peer=null,desk=null,want=false,stream=null,track=null,pc=null,cid=null,answe
 function showErr(t){$('#err').style.display=t?'block':'none';$('#err').textContent=t||'';}
 function view(){$('#pairview').hidden=!!pair;$('#liveview').hidden=!pair;if(pair)$('#who').textContent=pair.name;}
 let room='';
-function drawQR(){$('#qr').innerHTML='';try{new QRCode($('#qr'),{text:CONTROL_ROOM+'?pair='+pcId+(room?'&room='+room:''),width:340,height:340,correctLevel:QRCode.CorrectLevel.M});}catch(e){}
-  const l=$('#roomline');if(l){l.textContent=room?'Class room '+room+' is open':'Waiting for the teacher to open Control Room…';l.classList.toggle('wait',!room);}}
-// which Control Room room is open right now? (the teacher's Mac answers at controlroom-lobby-<CLASS_KEY>)
-function askRoom(){const key=String(window.CLASS_KEY||'').toLowerCase().replace(/[^a-z0-9]/g,'');if(!key||!peer||!peer.open)return;
+// the class is found by the teacher's name (?t=… in the link, or typed once and remembered on this computer)
+const tKey=n=>String(n||'').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,40);
+let teacher=new URLSearchParams(location.search).get('t')||localStorage.cc_teacher||'';if(teacher)localStorage.cc_teacher=teacher;
+function drawQR(){$('#qr').innerHTML='';const k=tKey(teacher);try{new QRCode($('#qr'),{text:CONTROL_ROOM+'?pair='+pcId+(room?'&room='+room:'')+(k?'&t='+k:''),width:340,height:340,correctLevel:QRCode.CorrectLevel.M});}catch(e){}
+  const l=$('#roomline'),f=$('#teachf');f.hidden=!!k;
+  if(l){l.innerHTML=!k?'Which class is this computer in?':(room?'Class room '+esc(room)+' is open':'Waiting for '+esc(teacher)+' to open Control Room…')+(k?' · <a id=tch>not '+esc(teacher)+'?</a>':'');l.classList.toggle('wait',!room);
+    const a=$('#tch');if(a)a.onclick=()=>{teacher='';localStorage.removeItem('cc_teacher');room='';drawQR();$('#teachin').focus();};}}
+$('#teachf').onsubmit=e=>{e.preventDefault();const v=$('#teachin').value.replace(/\s+/g,' ').trim();if(!tKey(v))return;teacher=v;localStorage.cc_teacher=v;room='';drawQR();askRoom();};
+// which Control Room room is open right now? (the teacher's Mac answers at controlroom-lobby-<teacher>)
+function askRoom(){const key=tKey(teacher);if(!key||!peer||!peer.open)return;
   const c=peer.connect('controlroom-lobby-'+key,{serialization:'json',reliable:true});const t=setTimeout(()=>{try{c.close();}catch(e){}},8000);
   c.on('open',()=>c.send({t:'room?'}));c.on('data',m=>{clearTimeout(t);if(m&&m.t==='room'&&m.code&&m.code!==room){room=String(m.code).toUpperCase();drawQR();}try{c.close();}catch(e){}});c.on('error',()=>{});}
 setInterval(()=>{if(!pair)askRoom();},20000);

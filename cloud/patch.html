@@ -166,7 +166,11 @@ const startBtn=()=>{$('#start').hidden=ac.state==='running';};ac.onstatechange=s
 $('#start').onclick=()=>ac.resume();document.addEventListener('pointerdown',()=>{if(ac.state!=='running')ac.resume();});
 
 (async()=>{
-  try{new QRCode($('#qr'),{text:'https://gunnitynes.github.io/CADCAST/go/',width:300,height:300,correctLevel:QRCode.CorrectLevel.M});}catch(e){}
+  // the computers find this teacher's class by name (Control Room's teacher name, same browser)
+  {let tn='';try{tn=JSON.parse(localStorage.getItem('controlroom.teacher')||'""')||'';}catch(e){}
+   const k=String(tn).toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9]/g,'').slice(0,40);
+   const url='https://gunnitynes.github.io/CADCAST/go/'+(k?'?t='+encodeURIComponent(String(tn).trim()).replace(/%20/g,'+'):'');$('.golink').textContent=url.replace('https://','');
+   try{new QRCode($('#qr'),{text:url,width:300,height:300,correctLevel:QRCode.CorrectLevel.M});}catch(e){}}
   try{const st=await navigator.mediaDevices.getUserMedia({audio:true});st.getTracks().forEach(t=>t.stop());}catch(e){}   // output names + plain LAN addresses
   await listOutputs();navigator.mediaDevices.addEventListener('devicechange',listOutputs);
   if(sinkId)await setOut(sinkId);else route();

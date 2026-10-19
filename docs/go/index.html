@@ -104,6 +104,11 @@ details ol{padding-left:20px}details li{margin:6px 0}details em{font-style:norma
 .mission .drop b{color:var(--fg)}.mission .meter{height:8px;border-radius:4px;background:#1b2130;margin-top:8px;overflow:hidden}.mission .meter i{display:block;height:100%;width:0;background:var(--live)}
 .mission .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mission .facts div{background:#0b0d12;border-radius:12px;padding:10px 12px}.mission .facts small{display:block;color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.mission .facts b{font-size:20px}
 .mission .got{font-weight:700;font-size:14px;color:var(--live)}.mission .got.bad{color:var(--wait)}
+.go.hasm .who{font-size:clamp(36px,4.6vw,66px);max-width:38vw}
+.go.album .mission{order:-1;border:2px solid var(--live);box-shadow:0 0 0 6px rgba(0,0,0,.2),var(--shadow)}
+.go.album .mission .drop{padding:26px 16px;font-size:17px;border-color:var(--live);color:var(--fg);background:#0b0d12}
+.dropall{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(7,8,11,.88);border:6px dashed var(--live);font-size:clamp(30px,5vw,60px);font-weight:900;letter-spacing:-.03em;text-align:center;pointer-events:none}
+.dropall small{display:block;font-size:18px;font-weight:600;color:var(--dim);letter-spacing:0;margin-top:10px}
 .relay{width:min(520px,92vw);text-align:left;background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:22px;padding:22px 24px;display:grid;gap:12px;box-shadow:var(--shadow)}
 .relay .mh{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.relay h2{margin:0;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em}
 </style></head><body>
@@ -278,7 +283,7 @@ addEventListener('pagehide',()=>{if(want&&desk&&desk.open)try{desk.send({type:'b
 // ---------- missions from Control Room's Constraint Generator: the file is built here from its recipe
 let mission=null,mclockT=0,fileURL=null,album=null,albumURLs=[];
 function fmtLeft(ms){const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
-function showMission(m){mission=m;album=null;localStorage.removeItem('cc_album');localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
+function showMission(m){mission=m;album=null;document.querySelector('.go').classList.remove('album');localStorage.removeItem('cc_album');localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
   box.innerHTML=`<div class=mh><span>${m.rounds?`Round ${m.round} of ${m.rounds} · `:'Constraint · '}${esc(m.label)}</span><span class=mclock id=mclock></span></div><p class=lead>${esc(m.lead)}</p><h2>${esc(m.task)}</h2>
     <span class=rule>${esc(m.cat)} · ${esc(m.rule)}</span><div class=file id=file><div class="ico">…</div><b>Making your file…</b><span>${m.tempo?esc(m.tempo):'Fit it to your track'}</span></div>
     <p class=hint>Drag the file into your DAW, or download it. Tap Done on your phone when you’ve made it happen.</p>`;
@@ -327,7 +332,7 @@ function bindDrop(){const d=$('#drop');if(!d)return;const go=async f=>{if(!f)ret
   d.onclick=()=>{const i=document.createElement('input');i.type='file';i.onchange=()=>go(i.files[0]);i.click();};}
 // ---------- The Class Album: the brief (role, tempo, key, length, starter files) and a drop zone for the exported part
 
-function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
+function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm','album');
   albumURLs.forEach(u=>URL.revokeObjectURL(u));albumURLs=[];
   box.innerHTML=`<div class=mh><span>The Class Album${m.title?' · '+esc(m.title):''}</span><span class=mclock id=mclock></span></div><p class=lead>Your part in the class song</p><h2>${esc(m.role)}</h2>
     <span class=rule>${esc(m.tip)}</span><div class=facts><div><small>Tempo</small><b>${m.bpm} BPM</b></div><div><small>Key</small><b>${esc(m.key)}</b></div><div><small>Length</small><b>${m.bars} bars</b></div></div>
@@ -345,10 +350,16 @@ function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(
     d.innerHTML=`Sending <b>${esc(f.name)}</b>…<div class=meter><i id=adm></i></div>`;$('#agot').textContent='';
     const ok=await sendFile({kind:'part',round:m.round,name:f.name},f,x=>{const i=$('#adm');if(i)i.style.width=Math.round(x*100)+'%';});
     d.innerHTML=ok?`<b>${esc(f.name)}</b> sent. Drop a new export here to replace it.`:'Could not reach Control Room. Drop it again.';};
-  d.ondragover=e=>{e.preventDefault();d.classList.add('over');};d.ondragleave=()=>d.classList.remove('over');d.ondrop=e=>{e.preventDefault();d.classList.remove('over');go(e.dataTransfer.files[0]);};
-  d.onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='audio/*,.wav,.aif,.aiff';i.onchange=()=>go(i.files[0]);i.click();};}
+  d.onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='audio/*,.wav,.aif,.aiff';i.onchange=()=>go(i.files[0]);i.click();};
+  albumDrop=go;setTimeout(()=>box.scrollIntoView({behavior:'smooth',block:'center'}),300);}
+// while the album is open, a file dropped ANYWHERE on this page is the part
+let albumDrop=null,dragN=0;const dropAll=on=>{let o=$('#dropall');if(on&&!o){document.body.insertAdjacentHTML('beforeend','<div class=dropall id=dropall><div>Drop your part<small>it goes to Control Room for the class song</small></div></div>');}if(!on&&o)o.remove();};
+addEventListener('dragenter',e=>{if(!album||!albumDrop||![...(e.dataTransfer.types||[])].includes('Files'))return;dragN++;dropAll(true);});
+addEventListener('dragleave',()=>{if(!album)return;dragN=Math.max(0,dragN-1);if(!dragN)dropAll(false);});
+addEventListener('dragover',e=>{if(album&&albumDrop)e.preventDefault();});
+addEventListener('drop',e=>{dragN=0;dropAll(false);if(!album||!albumDrop)return;e.preventDefault();const f=e.dataTransfer.files[0];if(f)albumDrop(f);});
 function albumGot(m){const g=$('#agot');if(!g||!album)return;g.textContent=m.text||'';g.classList.toggle('bad',!m.ok);}
-function albumEnd(){album=null;localStorage.removeItem('cc_album');const d=$('#adrop');if(d)d.outerHTML='<p class=over>Hand-in closed. The class is arranging the song on the big screen.</p>';clearInterval(mclockT);const c=$('#mclock');if(c)c.textContent='';}
+function albumEnd(){album=null;albumDrop=null;localStorage.removeItem('cc_album');const d=$('#adrop');if(d)d.outerHTML='<p class=over>Hand-in closed. The class is arranging the song on the big screen.</p>';clearInterval(mclockT);const c=$('#mclock');if(c)c.textContent='';}
 try{const m=JSON.parse(localStorage.cc_album||'null');if(m&&Date.now()-(m.at||0)<3*3600e3)albumShow(m);}catch(e){}
 
 // incoming: the track to grow (a recording, decoded and handed over as WAV for the DAW) or a project file

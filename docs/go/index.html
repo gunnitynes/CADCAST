@@ -324,14 +324,16 @@ function gotChunk(m){let f=IN.get(m.fid);if(!f)IN.set(m.fid,f={parts:[],got:0,n:
   if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';}
   if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}));}}
 function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');
-  const head=`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
-  if(!file){box.innerHTML=head+`<div class=file><div class=ico>…</div><b>Arriving…</b><span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
+  const head=meta.kind==='drop'?`<div class=mh>Supply drop ${meta.round} · from your teacher</div><h2>Your material</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
+  if(!file){if(meta.kind==='drop'&&box.dataset.round==='d'+meta.round)return;box.innerHTML=head+`<div class=file><div class=ico>…</div><b>Arriving…</b><span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
   relayURLs.push(file.url);const el=document.createElement('div');el.className='file';el.draggable=true;
   el.ondragstart=e=>{e.dataTransfer.setData('DownloadURL',`${file.mime}:${file.name}:${file.url}`);e.dataTransfer.effectAllowed='copy';};
-  el.innerHTML=`<div class="ico ${file.wav?'wav':''}">${file.wav?'WAV':'ZIP'}</div><b>${esc(file.name)}</b><span>${esc(file.info)}</span><div class=acts><a href="${file.url}" download="${esc(file.name)}">⬇ Download</a></div>`;
-  if(box.dataset.round!==String(meta.round)){box.dataset.round=meta.round;box.innerHTML=head;}else{const a=box.querySelector('.file:not([draggable])');if(a)a.remove();}
-  box.appendChild(el);if(!box.querySelector('.hint'))box.insertAdjacentHTML('beforeend','<p class=hint>Drag it into your DAW, or download it. Your card is on your phone.</p>');}
-async function relayFile(meta,blob){const base=`Stop ${meta.round+1} from ${String(meta.from||'someone').replace(/[\\/:*?"<>|]/g,'')}`;
+  el.innerHTML=`<div class="ico ${file.wav?'wav':''}">${file.tag||(file.wav?'WAV':'ZIP')}</div><b>${esc(file.name)}</b><span>${esc(file.info)}</span><div class=acts><a href="${file.url}" download="${esc(file.name)}">⬇ Download</a></div>`;
+  const rk=(meta.kind==='drop'?'d':'')+meta.round;if(box.dataset.round!==rk){box.dataset.round=rk;box.innerHTML=head;}else{const a=box.querySelector('.file:not([draggable])');if(a)a.remove();}
+  const hint=box.querySelector('.hint');if(hint)box.insertBefore(el,hint);else box.appendChild(el);if(!box.querySelector('.hint'))box.insertAdjacentHTML('beforeend',`<p class=hint>Drag it into your DAW, or download it.${meta.kind==='drop'?'':' Your card is on your phone.'}</p>`);}
+async function relayFile(meta,blob){
+  if(meta.kind==='drop'){const ext=(String(meta.name||'').match(/\.([a-z0-9]+)$/i)||[,'file'])[1].toUpperCase().slice(0,4),aud=/^(WAV|MP3|AIF|AIFF|FLAC|M4A|OGG)$/.test(ext);
+    relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||'material',mime:blob.type||'application/octet-stream',info:(blob.size>1e6?(blob.size/1e6).toFixed(1)+' MB':Math.max(1,Math.round(blob.size/1e3))+' KB')+(meta.label?' · '+meta.label:''),wav:aud,tag:ext});return;}const base=`Stop ${meta.round+1} from ${String(meta.from||'someone').replace(/[\\/:*?"<>|]/g,'')}`;
   if(meta.kind==='project'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||base+'.zip',mime:blob.type||'application/zip',info:Math.round(blob.size/1e6)+' MB project',wav:false});return;}
   try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const buf=await ac.decodeAudioData(await blob.arrayBuffer());
     const wav=wavOf(buf);relayBox(meta,{url:URL.createObjectURL(wav),name:base+'.wav',mime:'audio/wav',info:Math.round(buf.duration)+' s · WAV',wav:true});}

@@ -196,6 +196,7 @@ function route(){const d=ac.destination;if(merger){merger.disconnect();merger=nu
     merger=ac.createChannelMerger(max);merger.connect(d);
     for(const u of users.values()){const a=(u.num-1)*2;if(a+1>=max)continue;u.outs=[a,a+1];if(!u.gain)continue;
       const sp=ac.createChannelSplitter(2);u.gain.connect(sp);sp.connect(merger,0,a);sp.connect(merger,1,a+1);}}
+  for(const u of users.values())if(u.gain)u.gain.connect(condRecDest());
   for(const b of $('#mode').children)b.classList.toggle('on',b.dataset.m===mode);
   const max=ac.destination.maxChannelCount||2;
   $('#route').innerHTML=mode==='mix'?`<b>Stereo mix</b> → ${esc(outName)}`:
@@ -228,10 +229,11 @@ function waitlist(){const a=allowList(),now=Date.now(),live=new Set([...users.va
   const w=Object.entries(a).filter(([pc,v])=>v&&v.name&&now-(v.at||0)<12*3600e3&&!live.has(pc)).sort((x,y)=>x[1].name.localeCompare(y[1].name));
   $('#waitlist').innerHTML=w.length?`<span class=wl>Paired · no sound yet</span>`+w.map(([,v])=>`<span class=wc title="Paired. Their computer hasn’t sent audio yet (they may need to allow the microphone or tap Connect).">${'<i></i>'}${esc(v.name)}</span>`).join(''):'';}
 // ---------- peers: each paired computer offers, the patch bay answers
-function detach(u){if(u.src)u.src.disconnect();if(u.gain)try{u.gain.disconnect();}catch(e){}if(u.el)u.el.srcObject=null;u.src=u.gain=u.el=u.an=null;}
+function detach(u){if(u.src)u.src.disconnect();if(u.dly)try{u.dly.disconnect();u.gate.disconnect();}catch(e){}if(u.gain)try{u.gain.disconnect();}catch(e){}if(u.el)u.el.srcObject=null;u.src=u.gain=u.el=u.an=null;}
 function attach(u,stream,pc){for(const r of pc.getReceivers()){try{r.jitterBufferTarget=20;}catch(e){}}
   detach(u);u.el=new Audio();u.el.muted=true;u.el.srcObject=stream;u.el.play().catch(()=>{});   // Chrome only feeds remote WebRTC audio to Web Audio while a media element holds the stream
-  u.src=ac.createMediaStreamSource(stream);u.gain=ac.createGain();u.gain.gain.value=0;u.src.connect(u.gain);
+  u.src=ac.createMediaStreamSource(stream);u.gain=ac.createGain();u.gain.gain.value=0;
+  u.dly=ac.createDelay(3);u.dly.delayTime.value=u.delay||0;u.gate=ac.createGain();u.gate.gain.value=COND.on&&!u.condOn?0:1;u.src.connect(u.dly).connect(u.gate).connect(u.gain);
   const sp=ac.createChannelSplitter(2);u.src.connect(sp);u.an=[0,1].map(c=>{const a=ac.createAnalyser();a.fftSize=1024;sp.connect(a,c);return a;});
   route();gains();}
 function drop(u){if(u.pc)u.pc.close();detach(u);users.delete(u.id);nums.delete(u.id);if(u.strip)u.strip.remove();route();render();}
@@ -271,6 +273,60 @@ addEventListener('storage',e=>{if(e.key==='controlroom.room')startPeer();if(e.ke
 setInterval(waitlist,5000);
 setInterval(startPeer,4000);
 if(window.BroadcastChannel)new BroadcastChannel('cadcast').onmessage=e=>{const m=e.data||{};if(m.t==='allow'){const u=users.get(m.pc);if(u){u.name=m.name;paint(u);}}};
+
+// ---------- The Conductor (Control Room's laptop orchestra), over BroadcastChannel 'cr-mixer' in this browser:
+// the DAWs keep tempo and bar with Ableton Link; this page lines the streams up (each arrives with its own network
+// delay), opens and closes each computer on the next bar, and records the mix.
+const COND={on:false,B:.5,ref:null,bar:-1,rec:null,dest:null,chunks:[]};
+const crch=window.BroadcastChannel?new BroadcastChannel('cr-mixer'):null;
+const tellCR=m=>{try{crch&&crch.postMessage(m);}catch(e){}};
+function condRecDest(){if(!COND.dest)COND.dest=ac.createMediaStreamDestination();return COND.dest;}
+function condStrips(){return sorted().map(u=>({pc:u.id,name:u.name,live:!u.gone&&u.state==='connected',delay:Math.round((u.delay||0)*1000),in:!!u.condOn,sync:u.sync||null}));}
+const nextBar=()=>{if(COND.ref==null)return ac.currentTime+0.03;const L=4*COND.B,t=ac.currentTime+0.06;return COND.ref+Math.ceil((t-COND.ref)/L)*L;};
+function condGate(u,on){u.condOn=on;if(!u.gate)return null;const t=COND.on?nextBar():ac.currentTime+.02;u.gate.gain.setTargetAtTime(on||!COND.on?1:0,t,.008);return t;}
+// the sync check: listen to every stream's metronome clicks, find the beat and the accented downbeat, then delay
+// the early streams so every downbeat lands together
+const CAP="class C extends AudioWorkletProcessor{constructor(){super();this.on=false;this.port.onmessage=e=>{this.on=!!e.data;};}process(i){const x=i[0]&&i[0][0];if(this.on&&x)this.port.postMessage({f:currentFrame,d:x.slice(0)});return true;}}registerProcessor('cap',C);";
+let capMod=null;
+function clickFit(x,f0,sr,B){   // onsets of clicks → beat phase (s, circular), downbeat beat index, confidence
+  const n=x.length,e=new Float32Array(n),hf=new Float32Array(n);let a=0,h=0;
+  for(let i=1;i<n;i++){const d=x[i]-x[i-1];a=0.9*a+0.1*Math.abs(x[i]);h=0.9*h+0.1*Math.abs(d);e[i]=a;hf[i]=h;}
+  let mx=0;for(let i=0;i<n;i++)if(e[i]>mx)mx=e[i];if(mx<1e-4)return null;
+  const on=[],gap=Math.round(0.08*sr);let last=-gap;for(let i=1;i<n;i++)if(e[i]>mx*0.35&&e[i-1]<=mx*0.35&&i-last>gap){on.push(i);last=i;}
+  if(on.length<4)return null;
+  let cx=0,cy=0;const ts=on.map(i=>(f0+i)/sr);ts.forEach(t=>{const th=2*Math.PI*((t%B)/B);cx+=Math.cos(th);cy+=Math.sin(th);});
+  const R=Math.hypot(cx,cy)/ts.length;let ph=Math.atan2(cy,cx)/(2*Math.PI)*B;if(ph<0)ph+=B;
+  // the accented click is the brighter one: compare high-frequency energy per beat position in the bar
+  const grp=[0,0,0,0],cnt=[0,0,0,0];on.forEach((i,k)=>{const t=ts[k],b=Math.round((t-ph)/B),w=Math.round(0.004*sr);let hs=0,ls=0;for(let j=i;j<Math.min(n,i+w);j++){hs+=hf[j];ls+=e[j];}const r=hs/(ls||1);grp[((b%4)+4)%4]+=r;cnt[((b%4)+4)%4]++;});
+  const avg=grp.map((g,i)=>cnt[i]?g/cnt[i]:0),best=avg.indexOf(Math.max(...avg)),rest=avg.filter((_,i)=>i!==best&&cnt[i]),acc=rest.length?avg[best]/(rest.reduce((a,b)=>a+b,0)/rest.length):1;
+  return {ph,R,clicks:on.length,db:best,accent:acc};}
+async function condSync(bpm,secs){COND.B=60/bpm;const B=COND.B,L=4*B,live=sorted().filter(u=>!u.gone&&u.src);
+  if(!capMod){capMod=ac.audioWorklet.addModule(URL.createObjectURL(new Blob([CAP],{type:'application/javascript'})));}await capMod;
+  const taps=live.map(u=>{const n=new AudioWorkletNode(ac,'cap',{numberOfInputs:1,numberOfOutputs:0,channelCount:1,channelCountMode:'explicit'});const parts=[];n.port.onmessage=e=>parts.push(e.data);u.src.connect(n);n.port.postMessage(true);return {u,n,parts};});
+  tellCR({t:'syncing',secs});await new Promise(r=>setTimeout(r,secs*1000));
+  const fits=taps.map(({u,n,parts})=>{n.port.postMessage(false);try{u.src.disconnect(n);}catch(e){}if(!parts.length)return {u,fit:null};
+    const f0=parts[0].f,len=parts.reduce((a,p)=>a+p.d.length,0),x=new Float32Array(len);let o=0;parts.forEach(p=>{x.set(p.d,o);o+=p.d.length;});return {u,fit:clickFit(x,f0,ac.sampleRate,B)};});
+  const ok=fits.filter(f=>f.fit&&f.fit.R>0.8),useBar=ok.length&&ok.every(f=>f.fit.accent>1.15);
+  // each stream's downbeat (or beat) phase, unwrapped around their circular mean; the latest arrival sets the reference
+  const P=useBar?L:B,phs=ok.map(f=>((useBar?f.fit.ph+f.fit.db*B:f.fit.ph)%P+P)%P);
+  let cx=0,cy=0;phs.forEach(p=>{cx+=Math.cos(2*Math.PI*p/P);cy+=Math.sin(2*Math.PI*p/P);});const m=((Math.atan2(cy,cx)/(2*Math.PI)*P)%P+P)%P;
+  const d=phs.map(p=>((p-m+P*1.5)%P)-P/2),late=d.length?Math.max(...d):0;
+  ok.forEach((f,i)=>{f.u.delay=Math.min(2.5,late-d[i]);if(f.u.dly)f.u.dly.delayTime.setTargetAtTime(f.u.delay,ac.currentTime,.05);f.u.sync={ok:true,ms:Math.round(f.u.delay*1000),clicks:f.fit.clicks};});
+  fits.filter(f=>!ok.includes(f)).forEach(f=>{f.u.sync={ok:false,clicks:f.fit?f.fit.clicks:0};});
+  COND.ref=ok.length?(m+late)+Math.floor(ac.currentTime/P)*P:ac.currentTime;COND.barSure=useBar;
+  tellCR({t:'synced',bar:useBar,strips:condStrips()});}
+function condBarTick(){if(COND.ref==null)return;const n=Math.floor((ac.currentTime-COND.ref)/(4*COND.B));if(n!==COND.bar){COND.bar=n;tellCR({t:'bar',n});}}
+setInterval(condBarTick,40);
+if(crch)crch.onmessage=e=>{const m=e.data||{};
+  if(m.t==='hello?')tellCR({t:'mixer',strips:condStrips(),bar:COND.bar,ref:COND.ref!=null});
+  if(m.t==='sync')condSync(m.bpm,m.secs||8).catch(err=>tellCR({t:'synced',error:String(err)}));
+  if(m.t==='cond'){COND.on=!!m.on;if(m.bpm)COND.B=60/m.bpm;sorted().forEach(u=>{if(m.on)u.condOn=false;if(u.gate)u.gate.gain.setTargetAtTime(m.on?0:1,ac.currentTime,.05);});tellCR({t:'mixer',strips:condStrips(),bar:COND.bar});}
+  if(m.t==='gate'){const u=users.get(m.pc);if(u){const t=condGate(u,!!m.on);tellCR({t:'gated',pc:m.pc,on:!!m.on,bar:COND.ref==null?COND.bar:Math.round((t-COND.ref)/(4*COND.B))});}}
+  if(m.t==='rec'){if(m.on){if(COND.rec&&COND.rec.state==='recording')return;COND.chunks=[];const mt=['audio/webm;codecs=opus','audio/webm'].find(t=>MediaRecorder.isTypeSupported(t));
+      COND.rec=new MediaRecorder(condRecDest().stream,{mimeType:mt,audioBitsPerSecond:256000});COND.rec.ondataavailable=ev=>{if(ev.data.size)COND.chunks.push(ev.data);};COND.t0=Date.now();
+      COND.rec.onstop=()=>tellCR({t:'recdone',id:m.id,blob:new Blob(COND.chunks,{type:COND.rec.mimeType}),dur:(Date.now()-COND.t0)/1000});COND.rec.start(1000);}
+    else if(COND.rec&&COND.rec.state==='recording')COND.rec.stop();}};
+setInterval(()=>{if(COND.on)tellCR({t:'mixer',strips:condStrips(),bar:COND.bar});},2000);
 
 // ---------- meters (pre-fader)
 const buf=new Float32Array(1024);

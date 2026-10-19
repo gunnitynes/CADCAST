@@ -44,6 +44,10 @@
 .rec p{color:var(--dim);font-size:18px;max-width:28em;margin:8px auto}.rec button{font-size:20px;font-weight:800;padding:16px 26px;border-radius:14px;border:0;background:#fff;color:#111;margin-top:14px}
 .rec .drop{margin:18px auto 0;max-width:30em;border:2px dashed #39404f;border-radius:16px;padding:18px;color:var(--dim)}.rec .drop.over{border-color:var(--live);color:var(--fg)}
 .rec .meter{height:10px;border-radius:5px;background:#1b2130;max-width:420px;margin:10px auto;overflow:hidden}.rec .meter i{display:block;height:100%;width:0;background:var(--live)}
+.mission .drop{border:2px dashed #39404f;border-radius:16px;padding:16px;color:var(--dim);font-size:15px;cursor:pointer;text-align:center}.mission .drop.over{border-color:var(--live);color:var(--fg);background:#0b0d12}
+.mission .drop b{color:var(--fg)}.mission .meter{height:8px;border-radius:4px;background:#1b2130;margin-top:8px;overflow:hidden}.mission .meter i{display:block;height:100%;width:0;background:var(--live)}
+.mission .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mission .facts div{background:#0b0d12;border-radius:12px;padding:10px 12px}.mission .facts small{display:block;color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.mission .facts b{font-size:20px}
+.mission .got{font-weight:700;font-size:14px;color:var(--live)}.mission .got.bad{color:var(--wait)}
 .relay{width:min(520px,92vw);text-align:left;background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:22px;padding:22px 24px;display:grid;gap:12px;box-shadow:var(--shadow)}
 .relay .mh{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.relay h2{margin:0;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em}
 </style></head><body>
@@ -119,6 +123,9 @@ function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
     if(m.t==='relay-note')return relayNote(m);
     if(m.t==='mission'&&m.m)return showMission(m.m);
     if(m.t==='mission-end')return endMission(m.round);
+    if(m.t==='album'&&m.m)return albumShow(m.m);
+    if(m.t==='album-got')return albumGot(m);
+    if(m.t==='album-end')return albumEnd();
     if(m.t!=='paired'||!m.name||!m.desk)return;
     pair={name:String(m.name).slice(0,40),desk:String(m.desk),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();}));
   peer.on('error',e=>{
@@ -181,9 +188,9 @@ document.addEventListener('pointerdown',()=>{if(ac&&ac.state!=='running')ac.resu
 addEventListener('pagehide',()=>{if(want&&desk&&desk.open)try{desk.send({type:'bye',pc:pcId});}catch(e){}});
 
 // ---------- missions from Control Room's Constraint Generator: the file is built here from its recipe
-let mission=null,mclockT=0,fileURL=null;
+let mission=null,mclockT=0,fileURL=null,album=null,albumURLs=[];
 function fmtLeft(ms){const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
-function showMission(m){mission=m;localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
+function showMission(m){mission=m;album=null;localStorage.removeItem('cc_album');localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
   box.innerHTML=`<div class=mh><span>${m.rounds?`Round ${m.round} of ${m.rounds} · `:'Constraint · '}${esc(m.label)}</span><span class=mclock id=mclock></span></div><p class=lead>${esc(m.lead)}</p><h2>${esc(m.task)}</h2>
     <span class=rule>${esc(m.cat)} · ${esc(m.rule)}</span><div class=file id=file><div class="ico">…</div><b>Making your file…</b><span>${m.tempo?esc(m.tempo):'Fit it to your track'}</span></div>
     <p class=hint>Drag the file into your DAW, or download it. Tap Done on your phone when you’ve made it happen.</p>`;
@@ -230,20 +237,47 @@ function bindDrop(){const d=$('#drop');if(!d)return;const go=async f=>{if(!f)ret
     d.innerHTML=ok?`Project <b>${esc(f.name)}</b> sent ✓ <button id=recok>OK</button>`:'Could not send the project.';const b=$('#recok');if(b)b.onclick=()=>recView('');};
   d.ondragover=e=>{e.preventDefault();d.classList.add('over');};d.ondragleave=()=>d.classList.remove('over');d.ondrop=e=>{e.preventDefault();d.classList.remove('over');go(e.dataTransfer.files[0]);};
   d.onclick=()=>{const i=document.createElement('input');i.type='file';i.onchange=()=>go(i.files[0]);i.click();};}
+// ---------- The Class Album: the brief (role, tempo, key, length, starter files) and a drop zone for the exported part
+
+function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
+  albumURLs.forEach(u=>URL.revokeObjectURL(u));albumURLs=[];
+  box.innerHTML=`<div class=mh><span>The Class Album${m.title?' · '+esc(m.title):''}</span><span class=mclock id=mclock></span></div><p class=lead>Your part in the class song</p><h2>${esc(m.role)}</h2>
+    <span class=rule>${esc(m.tip)}</span><div class=facts><div><small>Tempo</small><b>${m.bpm} BPM</b></div><div><small>Key</small><b>${esc(m.key)}</b></div><div><small>Length</small><b>${m.bars} bars</b></div></div>
+    <div id=afiles>${(m.files||[]).map((r,i)=>`<div class=file id=af${i}><div class=ico>…</div><b>Making the starter…</b><span></span></div>`).join('')}</div>
+    <div class=drop id=adrop>When it’s done: export <b>bars 1 to ${m.bars+1}</b> (exactly ${m.bars} bars, from the start of bar 1) as WAV and <b>drop the file here</b>.</div><p class=got id=agot></p>
+    <p class=hint>Starter files: drag them into your DAW. Everyone has the same chords, so every part fits.</p>`;
+  clearInterval(mclockT);mclockT=setInterval(()=>{const c=$('#mclock');if(!c||!album)return;if(!album.ends){c.textContent='';return;}const left=album.ends-Date.now();c.textContent=left>0?fmtLeft(left):'time';},500);
+  (m.files||[]).forEach((rc,i)=>ASSETS.make(rc).then(f=>{if(album!==m)return;const url=URL.createObjectURL(new Blob([f.bytes],{type:f.mime}));albumURLs.push(url);const wav=f.mime==='audio/wav',el=$('#af'+i);if(!el)return;
+    el.draggable=true;el.ondragstart=e=>{e.dataTransfer.setData('DownloadURL',`${f.mime}:${f.name}:${url}`);e.dataTransfer.effectAllowed='copy';};
+    el.innerHTML=`<div class="ico ${wav?'wav':''}">${wav?'WAV':'MIDI'}</div><b>${esc(f.name)}</b><span>${esc(rc.what||f.info)}</span><div class=acts><a href="${url}" download="${esc(f.name)}">⬇ Download</a><button>▶ Listen</button></div>`;
+    let h=null;const b=el.querySelector('button');b.onclick=()=>{if(h){h.stop();h=null;b.textContent='▶ Listen';return;}h=ASSETS.preview(f);b.textContent='■ Stop';};
+  }).catch(e=>{const el=$('#af'+i);if(el)el.innerHTML=`<div class=ico>!</div><b>Could not make the file</b><span>${esc(e.message)}</span>`;}));
+  const d=$('#adrop'),go=async f=>{if(!f)return;if(f.size>200e6){d.textContent='That file is over 200 MB.';return;}
+    if(!/^audio\//.test(f.type)&&!/\.(wav|aif|aiff|mp3|flac|m4a|ogg)$/i.test(f.name)){d.innerHTML='That isn’t an audio file. Export your part as <b>WAV</b> and drop it here.';return;}
+    d.innerHTML=`Sending <b>${esc(f.name)}</b>…<div class=meter><i id=adm></i></div>`;$('#agot').textContent='';
+    const ok=await sendFile({kind:'part',round:m.round,name:f.name},f,x=>{const i=$('#adm');if(i)i.style.width=Math.round(x*100)+'%';});
+    d.innerHTML=ok?`<b>${esc(f.name)}</b> sent. Drop a new export here to replace it.`:'Could not reach Control Room. Drop it again.';};
+  d.ondragover=e=>{e.preventDefault();d.classList.add('over');};d.ondragleave=()=>d.classList.remove('over');d.ondrop=e=>{e.preventDefault();d.classList.remove('over');go(e.dataTransfer.files[0]);};
+  d.onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='audio/*,.wav,.aif,.aiff';i.onchange=()=>go(i.files[0]);i.click();};}
+function albumGot(m){const g=$('#agot');if(!g||!album)return;g.textContent=m.text||'';g.classList.toggle('bad',!m.ok);}
+function albumEnd(){album=null;localStorage.removeItem('cc_album');const d=$('#adrop');if(d)d.outerHTML='<p class=over>Hand-in closed. The class is arranging the song on the big screen.</p>';clearInterval(mclockT);const c=$('#mclock');if(c)c.textContent='';}
+try{const m=JSON.parse(localStorage.cc_album||'null');if(m&&Date.now()-(m.at||0)<3*3600e3)albumShow(m);}catch(e){}
+
 // incoming: the track to grow (a recording, decoded and handed over as WAV for the DAW) or a project file
 const IN=new Map();let relayURLs=[];
 function gotChunk(m){let f=IN.get(m.fid);if(!f)IN.set(m.fid,f={parts:[],got:0,n:m.n,meta:null});if(m.meta)f.meta=m.meta;if(!f.parts[m.i]){f.parts[m.i]=UNB64(m.data);f.got++;}
   if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';}
   if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}));}}
 function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');
-  const head=meta.kind==='drop'?`<div class=mh>Supply drop ${meta.round} · from your teacher</div><h2>Your material</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
-  if(!file){if(meta.kind==='drop'&&box.dataset.round==='d'+meta.round)return;box.innerHTML=head+`<div class=file><div class=ico>…</div><b>Arriving…</b><span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
+  const head=meta.kind==='album'?`<div class=mh>The Class Album · from your class</div><h2>${esc(meta.title||'Our song')}</h2>`:meta.kind==='drop'?`<div class=mh>Supply drop ${meta.round} · from your teacher</div><h2>Your material</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
+  if(!file){if(meta.kind==='drop'&&box.dataset.round==='d'+meta.round||meta.kind==='album'&&box.dataset.round==='a'+meta.round)return;box.innerHTML=head+`<div class=file><div class=ico>…</div><b>Arriving…</b><span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
   relayURLs.push(file.url);const el=document.createElement('div');el.className='file';el.draggable=true;
   el.ondragstart=e=>{e.dataTransfer.setData('DownloadURL',`${file.mime}:${file.name}:${file.url}`);e.dataTransfer.effectAllowed='copy';};
   el.innerHTML=`<div class="ico ${file.wav?'wav':''}">${file.tag||(file.wav?'WAV':'ZIP')}</div><b>${esc(file.name)}</b><span>${esc(file.info)}</span><div class=acts><a href="${file.url}" download="${esc(file.name)}">⬇ Download</a></div>`;
-  const rk=(meta.kind==='drop'?'d':'')+meta.round;if(box.dataset.round!==rk){box.dataset.round=rk;box.innerHTML=head;}else{const a=box.querySelector('.file:not([draggable])');if(a)a.remove();}
-  const hint=box.querySelector('.hint');if(hint)box.insertBefore(el,hint);else box.appendChild(el);if(!box.querySelector('.hint'))box.insertAdjacentHTML('beforeend',`<p class=hint>Drag it into your DAW, or download it.${meta.kind==='drop'?'':' Your card is on your phone.'}</p>`);}
+  const rk=(meta.kind==='drop'?'d':meta.kind==='album'?'a':'')+meta.round;if(box.dataset.round!==rk){box.dataset.round=rk;box.innerHTML=head;}else{const a=box.querySelector('.file:not([draggable])');if(a)a.remove();}
+  const hint=box.querySelector('.hint');if(hint)box.insertBefore(el,hint);else box.appendChild(el);if(!box.querySelector('.hint'))box.insertAdjacentHTML('beforeend',`<p class=hint>Drag it into your DAW, or download it.${meta.kind==='drop'||meta.kind==='album'?'':' Your card is on your phone.'}</p>`);}
 async function relayFile(meta,blob){
+  if(meta.kind==='album'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||'The Class Album.wav',mime:blob.type||'audio/wav',info:(blob.size/1e6).toFixed(1)+' MB · '+(meta.what||'the class mix'),wav:true,tag:'WAV'});return;}
   if(meta.kind==='drop'){const ext=(String(meta.name||'').match(/\.([a-z0-9]+)$/i)||[,'file'])[1].toUpperCase().slice(0,4),aud=/^(WAV|MP3|AIF|AIFF|FLAC|M4A|OGG)$/.test(ext);
     relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||'material',mime:blob.type||'application/octet-stream',info:(blob.size>1e6?(blob.size/1e6).toFixed(1)+' MB':Math.max(1,Math.round(blob.size/1e3))+' KB')+(meta.label?' · '+meta.label:''),wav:aud,tag:ext});return;}const base=`Stop ${meta.round+1} from ${String(meta.from||'someone').replace(/[\\/:*?"<>|]/g,'')}`;
   if(meta.kind==='project'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||base+'.zip',mime:blob.type||'application/zip',info:Math.round(blob.size/1e6)+' MB project',wav:false});return;}

@@ -170,7 +170,7 @@ let mission=null,mclockT=0,fileURL=null;
 function fmtLeft(ms){const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
 function showMission(m){mission=m;localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
   box.innerHTML=`<div class=mh><span>${m.rounds?`Round ${m.round} of ${m.rounds} · `:'Constraint · '}${esc(m.label)}</span><span class=mclock id=mclock></span></div><p class=lead>${esc(m.lead)}</p><h2>${esc(m.task)}</h2>
-    <span class=rule>${esc(m.cat)} · ${esc(m.rule)}</span><div class=file id=file><div class="ico">…</div><b>Making your file…</b><span>${esc(m.recipe.key)} · ${m.recipe.bpm} BPM</span></div>
+    <span class=rule>${esc(m.cat)} · ${esc(m.rule)}</span><div class=file id=file><div class="ico">…</div><b>Making your file…</b><span>${m.tempo?esc(m.tempo):'Fit it to your track'}</span></div>
     <p class=hint>Drag the file into your DAW, or download it. Tap Done on your phone when you’ve made it happen.</p>`;
   clearInterval(mclockT);mclockT=setInterval(()=>{const c=$('#mclock');if(!c||!mission)return;if(!mission.ends){c.textContent='';return;}const left=mission.ends-Date.now();c.textContent=left>0?fmtLeft(left):'time';},500);
   ASSETS.make(m.recipe).then(f=>{if(mission!==m)return;if(fileURL)URL.revokeObjectURL(fileURL);fileURL=URL.createObjectURL(new Blob([f.bytes],{type:f.mime}));const wav=f.mime==='audio/wav';

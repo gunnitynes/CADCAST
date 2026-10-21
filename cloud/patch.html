@@ -113,7 +113,7 @@ async function onOffer(conn,d){const id=String(d.pc||'').slice(0,24),who=allowLi
   if(!u){let num=nums.get(id);if(!num){const used=new Set([...users.values()].map(x=>x.num));num=1;while(used.has(num))num++;nums.set(id,num);}
     u={id,num,name:who.name,vol:savedVol(who.name),mute:false,solo:false,peak:[-90,-90],state:'new',gone:false};users.set(id,u);}
   u.name=who.name;u.conn=conn;u.dev=d.dev||'';u.gone=false;u.state='connecting';clearTimeout(u.goneT);
-  if(u.pc)u.pc.close();const pc=new RTCPeerConnection({iceServers:[]});u.pc=pc;
+  if(u.pc)u.pc.close();await iceReady();const pc=new RTCPeerConnection(rtcCfg());u.pc=pc;
   pc.ontrack=e=>attach(u,e.streams[0]||new MediaStream([e.track]),pc);
   pc.onconnectionstatechange=()=>{if(u.pc!==pc)return;const st=pc.connectionState;u.state=st;
     if(st==='connected'){u.gone=false;clearTimeout(u.goneT);}
@@ -127,12 +127,22 @@ function onData(conn,d){if(!d||typeof d!=='object')return;
   if(d.type==='offer')onOffer(conn,d).catch(e=>console.warn('offer',e));
   else if(d.type==='bye'){const u=users.get(String(d.pc||''));if(u)drop(u);}}
 
+// relay passwords (TURN) from the Cloudflare Worker: direct when the network allows, relayed (port 443) when a school
+// network blocks device-to-device traffic. Cached 20 h. ?relay forces the relay (testing).
+const TURN_URL='https://controlroom-turn.gunnitynes.workers.dev';let ICE=null;
+async function iceReady(){if(ICE)return ICE;try{const c=JSON.parse(localStorage.cc_ice||'null');if(c&&Date.now()-c.at<20*3600e3&&c.s&&c.s.length){ICE=c.s;return ICE;}}catch(e){}
+  try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),4000);const j=await (await fetch(TURN_URL,{signal:ctl.signal,cache:'no-store'})).json();clearTimeout(t);
+    if(j.iceServers&&j.iceServers.length){ICE=j.iceServers;localStorage.cc_ice=JSON.stringify({at:Date.now(),s:ICE});}}catch(e){}
+  return ICE||[];}
+const FORCE_RELAY=new URLSearchParams(location.search).has('relay');
+const rtcCfg=()=>({iceServers:ICE&&ICE.length?ICE:[{urls:'stun:stun.cloudflare.com:3478'}],...(FORCE_RELAY?{iceTransportPolicy:'relay'}:{})});
+const peerCfg=()=>({debug:0,config:rtcCfg()});
 // ---------- our address on the relay follows Control Room's room on this Mac
 function startPeer(){const c=roomCode();
   if(!c){code='';if(peer){peer.destroy();peer=null;}cover('Open Control Room on this Mac first','The patch bay pairs computers through Control Room’s room. Open Control Room (gunnitynes.github.io/Control-Room) in another tab and this page connects by itself.');return;}
   if(c===code&&peer&&!peer.destroyed)return;
   code=c;if(peer)peer.destroy();
-  const p=new Peer('cadcast-desk-'+c.toLowerCase(),{debug:0});peer=p;
+  const p=new Peer('cadcast-desk-'+c.toLowerCase(),peerCfg());peer=p;
   p.on('open',()=>{if(peer!==p)return;uncover();$('#net').textContent='paired with room '+c;});
   p.on('connection',conn=>{conn.on('data',d=>onData(conn,d));conn.on('error',()=>{});});
   p.on('error',e=>{if(peer!==p)return;
@@ -231,6 +241,6 @@ $('#start').onclick=()=>ac.resume();document.addEventListener('pointerdown',()=>
   await listOutputs();navigator.mediaDevices.addEventListener('devicechange',listOutputs);
   if(sinkId)await setOut(sinkId);else route();
   ac.resume().catch(()=>{});startBtn();
-  startPeer();render();requestAnimationFrame(frame);
+  iceReady().then(startPeer);render();requestAnimationFrame(frame);
 })();
 </script></body></html>

@@ -203,11 +203,21 @@ function askRoom(){const key=tKey(teacher);if(!key||!peer||!peer.open)return;
 setInterval(()=>{if(!pair)askRoom();},20000);
 function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');j.classList.toggle('on',want&&c);j.classList.toggle('wait',want&&!c);
   $('#lbl').textContent=!want?'Connect':c?'Connected':'Connecting…';
-  $('#sub').textContent=!want?'Tap to plug in again':c?'The teacher can hear this computer':status||'Connecting to the teacher’s patch bay…';}
+  $('#sub').textContent=!want?'Tap to plug in again':c?'The teacher can hear this computer'+(via==='relay'?' (through the relay)':''):status||'Connecting to the teacher’s patch bay…';}
 
+// relay passwords (TURN) from the Cloudflare Worker: direct when the network allows, relayed (port 443) when a school
+// network blocks device-to-device traffic. Cached 20 h. ?relay forces the relay (testing).
+const TURN_URL='https://controlroom-turn.gunnitynes.workers.dev';let ICE=null;
+async function iceReady(){if(ICE)return ICE;try{const c=JSON.parse(localStorage.cc_ice||'null');if(c&&Date.now()-c.at<20*3600e3&&c.s&&c.s.length){ICE=c.s;return ICE;}}catch(e){}
+  try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),4000);const j=await (await fetch(TURN_URL,{signal:ctl.signal,cache:'no-store'})).json();clearTimeout(t);
+    if(j.iceServers&&j.iceServers.length){ICE=j.iceServers;localStorage.cc_ice=JSON.stringify({at:Date.now(),s:ICE});}}catch(e){}
+  return ICE||[];}
+const FORCE_RELAY=new URLSearchParams(location.search).has('relay');
+const rtcCfg=()=>({iceServers:ICE&&ICE.length?ICE:[{urls:'stun:stun.cloudflare.com:3478'}],...(FORCE_RELAY?{iceTransportPolicy:'relay'}:{})});
+const peerCfg=()=>({debug:0,config:rtcCfg()});
 // ---------- the relay: this computer has its own address there; Control Room's host tells it who it is
-function startPeer(){if(peer&&!peer.destroyed)peer.destroy();
-  peer=new Peer('cadcast-pc-'+pcId,{debug:0});
+async function startPeer(){await iceReady();if(peer&&!peer.destroyed)peer.destroy();
+  peer=new Peer('cadcast-pc-'+pcId,peerCfg());
   peer.on('open',()=>{askRoom();if(pair&&want&&!desk)connectDesk();});
   peer.on('connection',c=>c.on('data',m=>{if(!m)return;hostC=c;
     if(m.t==='rec-start')return recStart(m);
@@ -257,12 +267,16 @@ async function onDesk(m){if(!m)return;
   if(m.type==='answer'&&pc&&m.cid===cid&&!answered){answered=true;await pc.setRemoteDescription({type:'answer',sdp:m.sdp});ui();}
   else if(m.type==='desk-hello')offer();
   else if(m.type==='denied'){status='The teacher’s Mixer doesn’t have this computer yet. It must be opened from Control Room on the teacher’s Mac. Trying again…';ui();try{desk.close();}catch(e){}desk=null;clearTimeout(deskT);deskT=setTimeout(connectDesk,5000);}}
+// is the audio going through the relay? (then 128 kb/s keeps the free allowance going)
+async function relayed(p){try{const st=await p.getStats();let pair=null;st.forEach(r=>{if(r.type==='transport'&&r.selectedCandidatePairId)pair=st.get(r.selectedCandidatePairId);});
+  if(!pair)st.forEach(r=>{if(r.type==='candidate-pair'&&r.nominated&&r.state==='succeeded')pair=r;});const l=pair&&st.get(pair.localCandidateId);return !!(l&&l.candidateType==='relay');}catch(e){return false;}}
+let via='';
 function teardown(){if(pc){pc.onconnectionstatechange=null;pc.close();}pc=null;cid=null;}
 async function offer(){clearTimeout(retryT);if(!want||!track||!desk||!desk.open)return;teardown();answered=false;
-  const p=new RTCPeerConnection({iceServers:[]});pc=p;cid=rnd();
+  await iceReady();const p=new RTCPeerConnection(rtcCfg());pc=p;cid=rnd();
   const sender=p.addTransceiver(track,{direction:'sendonly',streams:[stream]}).sender;   // live the whole time it's connected
   p.onconnectionstatechange=()=>{if(pc!==p)return;const st=p.connectionState;
-    if(st==='connected'){try{const prm=sender.getParameters();prm.encodings=prm.encodings&&prm.encodings.length?prm.encodings:[{}];prm.encodings[0].maxBitrate=320000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';sender.setParameters(prm).catch(()=>{});}catch(e){}}
+    if(st==='connected'){relayed(p).then(rl=>{try{const prm=sender.getParameters();prm.encodings=prm.encodings&&prm.encodings.length?prm.encodings:[{}];prm.encodings[0].maxBitrate=rl?128000:320000;prm.encodings[0].priority='high';prm.encodings[0].networkPriority='high';sender.setParameters(prm).catch(()=>{});}catch(e){}via=rl?'relay':'direct';ui();});}
     if(st==='failed'||st==='disconnected')retryT=setTimeout(offer,st==='failed'?500:3000);
     ui();};
   await p.setLocalDescription(await p.createOffer());await gathered(p);if(pc!==p)return;

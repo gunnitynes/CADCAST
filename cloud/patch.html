@@ -131,11 +131,12 @@ function onData(conn,d){if(!d||typeof d!=='object')return;
 // network blocks device-to-device traffic. Cached 20 h. ?relay forces the relay (testing).
 const TURN_URL='https://controlroom-turn.gunnitynes.workers.dev';let ICE=null;
 async function iceReady(){if(ICE)return ICE;try{const c=JSON.parse(localStorage.cc_ice||'null');if(c&&Date.now()-c.at<20*3600e3&&c.s&&c.s.length){ICE=c.s;return ICE;}}catch(e){}
-  try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),4000);const j=await (await fetch(TURN_URL,{signal:ctl.signal,cache:'no-store'})).json();clearTimeout(t);
-    if(j.iceServers&&j.iceServers.length){ICE=j.iceServers;localStorage.cc_ice=JSON.stringify({at:Date.now(),s:ICE});}}catch(e){}
+  for(let k=0;k<3&&!ICE;k++){try{const ctl=new AbortController(),t=setTimeout(()=>ctl.abort(),8000);const j=await (await fetch(TURN_URL,{signal:ctl.signal,cache:'no-store'})).json();clearTimeout(t);
+    if(j.iceServers&&j.iceServers.length){ICE=j.iceServers;localStorage.cc_ice=JSON.stringify({at:Date.now(),s:ICE});}}catch(e){await new Promise(r=>setTimeout(r,800));}}
   return ICE||[];}
-const FORCE_RELAY=new URLSearchParams(location.search).has('relay');
-const rtcCfg=()=>({iceServers:ICE&&ICE.length?ICE:[{urls:'stun:stun.cloudflare.com:3478'}],...(FORCE_RELAY?{iceTransportPolicy:'relay'}:{})});
+// for now everything goes through the relay (school networks block the direct route); ?direct tries direct first
+const FORCE_RELAY=!new URLSearchParams(location.search).has('direct');
+const rtcCfg=()=>({iceServers:ICE&&ICE.length?ICE:[{urls:'stun:stun.cloudflare.com:3478'}],...(FORCE_RELAY&&ICE&&ICE.length?{iceTransportPolicy:'relay'}:{})});
 const peerCfg=()=>({debug:0,config:rtcCfg()});
 // ---------- our address on the relay follows Control Room's room on this Mac
 function startPeer(){const c=roomCode();

@@ -246,7 +246,7 @@ function bindDrop(){const d=$('#drop');if(!d)return;const go=async f=>{if(!f)ret
 
 function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm','album');
   albumURLs.forEach(u=>URL.revokeObjectURL(u));albumURLs=[];
-  box.innerHTML=`<div class=mh><span>The Class Album${m.title?' · '+esc(m.title):''}</span><span class=mclock id=mclock></span></div><p class=lead>Your part in the class song</p><h2>${esc(m.role)}</h2>
+  box.innerHTML=`<div class=mh><span>${esc(m.head||'The Class Album')}${m.title?' · '+esc(m.title):''}</span><span class=mclock id=mclock></span></div><p class=lead>Your part in the class song</p><h2>${esc(m.role)}</h2>
     <span class=rule>${esc(m.tip)}</span><div class=facts><div><small>Tempo</small><b>${m.bpm} BPM</b></div><div><small>Key</small><b>${esc(m.key)}</b></div><div><small>Length</small><b>${m.bars} bars</b></div></div>
     <div id=afiles ${(m.files||[]).length?'':'hidden'}>${(m.files||[]).map((r,i)=>`<div class=file id=af${i}><div class=ico>…</div><b>Making the starter…</b><span></span></div>`).join('')}</div>
     <div class=drop id=adrop>When it’s done: export <b>bars 1 to ${m.bars+1}</b> (exactly ${m.bars} bars, from the start of bar 1) as WAV and <b>drop the file here</b>.</div><p class=got id=agot></p>
@@ -280,7 +280,7 @@ function gotChunk(m){let f=IN.get(m.fid);if(!f)IN.set(m.fid,f={parts:[],got:0,n:
   if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';}
   if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}));}}
 function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');
-  const head=meta.kind==='album'?`<div class=mh>The Class Album · from your class</div><h2>${esc(meta.title||'Our song')}</h2>`:meta.kind==='drop'?`<div class=mh>Supply drop ${meta.round} · from your teacher</div><h2>Your material</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
+  const head=meta.kind==='album'?`<div class=mh>The Class Album · from your class</div><h2>${esc(meta.title||'Our song')}</h2>`:meta.kind==='drop'?`<div class=mh>${meta.head?esc(meta.head):`Supply drop ${meta.round} · from your teacher`}</div><h2>${esc(meta.title||'Your material')}</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
   if(!file){if(meta.kind==='drop'&&box.dataset.round==='d'+meta.round||meta.kind==='album'&&box.dataset.round==='a'+meta.round)return;box.innerHTML=head+`<div class=file><div class=ico>…</div><b>Arriving…</b><span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
   relayURLs.push(file.url);const el=document.createElement('div');el.className='file';el.draggable=true;
   el.ondragstart=e=>{e.dataTransfer.setData('DownloadURL',`${file.mime}:${file.name}:${file.url}`);e.dataTransfer.effectAllowed='copy';};

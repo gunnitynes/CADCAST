@@ -79,7 +79,7 @@
   <div class=rec id=rec hidden></div>
   <div class=err id=err></div>
 </div>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/peerjs/1.5.4/peerjs.min.js" integrity="sha512-iFU+yF1keEaLDC9HEwPfLMSRaS0unBHE14GEgx6pQKJXjp5v0tvX8xpfp2lgJ62XEjbYp/M5C3CAmej/PWXMyA==" crossorigin="anonymous"></script>
 <script>window.CR_BASE='/Control-Room/';</script>
 <script src="/Control-Room/data/content.js"></script>
 <script src="/Control-Room/js/assets.js"></script>
@@ -112,7 +112,7 @@ $('#teachf').onsubmit=e=>{e.preventDefault();const v=$('#teachin').value.replace
 function askRoom(){const key=tKey(teacher);if(!key||!peer||!peer.open)return;
   const c=peer.connect('controlroom-lobby-'+key,{serialization:'json',reliable:true});const t=setTimeout(()=>{try{c.close();}catch(e){}},8000);
   c.on('open',()=>c.send({t:'room?'}));c.on('data',m=>{clearTimeout(t);if(m&&m.t==='room'&&m.code&&m.code!==room){room=String(m.code).toUpperCase();drawQR();}try{c.close();}catch(e){}});c.on('error',()=>{});}
-setInterval(()=>{if(!pair)askRoom();},20000);
+setInterval(askRoom,20000);   // also while paired: a New room in Control Room changes the code
 function ui(){const c=!!pc&&pc.connectionState==='connected';const j=$('#jack');j.classList.toggle('on',want&&c);j.classList.toggle('wait',want&&!c);
   $('#lbl').textContent=!want?'Connect':c?'Connected':'Connecting…';
   $('#sub').textContent=!want?'Tap to plug in again':c?'The teacher can hear this computer'+(via==='relay'?' (through the relay)':''):status||'Connecting to the teacher’s patch bay…';}
@@ -132,7 +132,12 @@ const peerCfg=()=>({debug:0,config:rtcCfg()});
 async function startPeer(){await iceReady();if(peer&&!peer.destroyed)peer.destroy();
   peer=new Peer('cadcast-pc-'+pcId,peerCfg());
   peer.on('open',()=>{askRoom();if(pair&&want&&!desk)connectDesk();});
-  peer.on('connection',c=>c.on('data',m=>{if(!m)return;hostC=c;
+  // only the teacher's Control Room room may talk to this page (anyone can see this computer's pairing code on its screen)
+  peer.on('connection',c=>c.on('data',m=>{if(!m||typeof m!=='object')return;const from=String(c.peer||'');
+    if(m.t==='paired'){if(!/^controlroom-v1-[a-z0-9]{4,8}$/.test(from)||!m.name||!m.desk)return;
+      pair={name:String(m.name).slice(0,40),desk:String(m.desk).slice(0,60),room:from.slice(15),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();return;}
+    const ok=[pair&&(pair.room||String(pair.desk||'').replace('cadcast-desk-','')),room].filter(Boolean).map(r=>'controlroom-v1-'+String(r).toLowerCase());if(!pair||!ok.includes(from))return;   // the room it paired in, or the teacher's current room (the lobby only answers for the teacher's own Control Room)
+    hostC=c;
     if(m.t==='rec-start')return recStart(m);
     if(m.t==='rec-stop')return recStop();
     if(m.t==='file')return gotChunk(m);
@@ -141,9 +146,7 @@ async function startPeer(){await iceReady();if(peer&&!peer.destroyed)peer.destro
     if(m.t==='mission-end')return endMission(m.round);
     if(m.t==='album'&&m.m)return albumShow(m.m);
     if(m.t==='album-got')return albumGot(m);
-    if(m.t==='album-end')return albumEnd();
-    if(m.t!=='paired'||!m.name||!m.desk)return;
-    pair={name:String(m.name).slice(0,40),desk:String(m.desk),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();}));
+    if(m.t==='album-end')return albumEnd();}));
   peer.on('error',e=>{
     if(e.type==='unavailable-id'){pcId=localStorage.cc_pc=rnd()+rnd().slice(0,4);drawQR();setTimeout(startPeer,300);return;}   // this code is open in another tab
     if(e.type==='peer-unavailable'){if(/controlroom-lobby-/.test(e.message||'')){if(!room){room='';drawQR();}return;}
@@ -291,7 +294,8 @@ try{const m=JSON.parse(localStorage.cc_album||'null');if(m&&Date.now()-(m.at||0)
 
 // incoming: the track to grow (a recording, decoded and handed over as WAV for the DAW) or a project file
 const IN=new Map();let relayURLs=[];
-function gotChunk(m){let f=IN.get(m.fid);if(!f)IN.set(m.fid,f={parts:[],got:0,n:m.n,meta:null});if(m.meta)f.meta=m.meta;if(!f.parts[m.i]){f.parts[m.i]=UNB64(m.data);f.got++;}
+function gotChunk(m){if(!(Number.isInteger(m.n)&&m.n>0&&m.n<=8000&&Number.isInteger(m.i)&&m.i>=0&&m.i<m.n&&typeof m.data==='string'&&m.data.length<70000))return;
+  let f=IN.get(m.fid);if(!f){if(IN.size>=6)return;IN.set(m.fid,f={parts:[],got:0,n:m.n,meta:null});}if(m.meta)f.meta=m.meta;if(!f.parts[m.i]){f.parts[m.i]=UNB64(m.data);f.got++;}
   if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';}
   if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}));}}
 function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');

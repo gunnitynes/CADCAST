@@ -3,7 +3,9 @@
   python3 cloud/build.py
 
 The templates reuse cadcast.py's own CSS, shared JS and level-meter worklet, so the cloud pages look and sound
-like the local ones. Run this after changing either, then commit docs/.
+like the local ones.
+Except the patch bay: cloud/patch.html has its own stylesheet in Control Room's Bauhaus look (it follows
+Control Room's theme, controlroom.theme) and its own faders; it no longer uses __CSS__ / __PATCH_CSS__. Run this after changing either, then commit docs/.
 """
 import importlib.util, os
 

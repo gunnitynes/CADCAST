@@ -142,6 +142,11 @@ details ol{padding-left:20px}details li{margin:6px 0}details em{font-style:norma
 .lplist{display:grid;gap:6px}.lpf{position:relative;display:flex;justify-content:space-between;gap:10px;padding:9px 12px;border-radius:10px;background:#0b0d12;overflow:hidden}
 .lpf b{font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;z-index:1}.lpf span{font-size:12px;color:var(--dim);white-space:nowrap;z-index:1}
 .lpf i{position:absolute;left:0;bottom:0;height:3px;background:var(--live);width:0;transition:width .2s}.lpf.st-ok span{color:var(--live)}.lpf.st-bad span{color:var(--off)}
+.tupov{position:fixed;inset:0;z-index:80;display:grid;place-items:center;text-align:center;padding:30px;background:#E4402B;color:#fff;cursor:pointer;font-family:"Archivo",system-ui,sans-serif}
+.tupov>div{display:grid;gap:18px;justify-items:center}.tupov span{font:700 13px "Space Mono",monospace;letter-spacing:.12em;text-transform:uppercase}
+.tupov h1{margin:0;font:900 clamp(90px,14vw,220px)/.8 "Archivo";font-stretch:62%;text-transform:uppercase;text-shadow:8px 8px 0 #161514}.tupov h1 i{font-style:normal;color:#F2B705}
+.tupov p{margin:0;font:800 clamp(20px,2.2vw,30px)/1.25 "Archivo";max-width:30ch;background:#F0EBE1;color:#161514;padding:12px 18px;border:4px solid #161514;box-shadow:8px 8px 0 #161514}
+.tupov button{font:900 18px "Archivo";text-transform:uppercase;padding:12px 30px;border:4px solid #161514;background:#1E8C5A;color:#fff;box-shadow:6px 6px 0 #161514;cursor:pointer}
 .dropall{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(7,8,11,.88);border:6px dashed var(--live);font-size:clamp(30px,5vw,60px);font-weight:900;letter-spacing:-.03em;text-align:center;pointer-events:none}
 .dropall small{display:block;font-size:18px;font-weight:600;color:var(--dim);letter-spacing:0;margin-top:10px}
 .relay{width:min(520px,92vw);text-align:left;background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:22px;padding:22px 24px;display:grid;gap:12px;box-shadow:var(--shadow)}
@@ -348,7 +353,8 @@ function hostMsg(c,m){if(!m||typeof m!=='object')return;const from=String(c.peer
     if(m.t==='album'&&m.m)return albumShow(m.m);
     if(m.t==='album-got')return albumGot(m);
     if(m.t==='album-end')return albumEnd();
-    if(m.t==='party-got')return partyGot(m);}
+    if(m.t==='party-got')return partyGot(m);
+    if(m.t==='timesup')return timesUp(m);}
 // relay passwords (TURN) from the Cloudflare Worker: direct when the network allows, relayed (port 443) when a school
 // network blocks device-to-device traffic. Cached 20 h. ?relay forces the relay (testing).
 const TURN_URL='https://controlroom-turn.gunnitynes.workers.dev';let ICE=null;
@@ -685,6 +691,9 @@ async function partyNext(){const job=lpQueue.shift();if(!job){lpBusy=false;retur
   e.st=ok?'check':'bad';partyDraw();setTimeout(()=>{if(e.st==='check'){e.st='bad';partyDraw();}},45000);partyNext();}
 function partyGot(m){const e=LPS.get(m.uid);if(e){e.st='ok';partyDraw();}}
 $('#lpbtn').onclick=partyOpen;
+// TIME'S UP from Control Room: a clear full-screen card saying what to do now; ✕ (or any click) closes it
+function timesUp(m){let ov=$('#tupov');if(!ov){ov=document.createElement('div');ov.id='tupov';ov.className='tupov';document.body.appendChild(ov);}
+  ov.innerHTML=`<div><span>${esc(m.game||'')}</span><h1>Time’s <i>up</i></h1>${m.next?`<p>${esc(m.next)}</p>`:''}<button id=tupok>OK</button></div>`;ov.onclick=()=>ov.remove();}
 function relayNote(m){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');box.dataset.round='';
   box.innerHTML=`<div class=mh>Stop ${(m.round||0)+1}</div><h2>${esc(m.text)}</h2>`;}
 

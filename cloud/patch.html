@@ -235,7 +235,7 @@ function render(){const list=sorted();const box=$('#strips');
 
 // ---------- paired but not plugged in yet (from Control Room's list, last 12 hours): so the teacher sees who is in
 function waitlist(){const a=allowList(),now=Date.now(),live=new Set([...users.values()].filter(u=>!u.gone).map(u=>u.id));
-  const w=Object.entries(a).filter(([pc,v])=>v&&v.name&&now-(v.at||0)<12*3600e3&&!live.has(pc)).sort((x,y)=>x[1].name.localeCompare(y[1].name));
+  const w=Object.entries(a).filter(([pc,v])=>v&&v.name&&!v.party&&now-(v.at||0)<12*3600e3&&!live.has(pc)).sort((x,y)=>x[1].name.localeCompare(y[1].name));
   $('#waitlist').innerHTML=w.length?`<span class="wl lab">Paired · no sound yet</span>`+w.map(([,v])=>`<span class=wc title="Paired. Their computer hasn’t sent audio yet (they may need to allow the microphone or tap Connect).">${'<i></i>'}${esc(v.name)}</span>`).join(''):'';}
 // ---------- peers: each paired computer offers, the patch bay answers
 function detach(u){if(u.src)u.src.disconnect();if(u.dly)try{u.dly.disconnect();u.gate.disconnect();}catch(e){}if(u.gain)try{u.gain.disconnect();}catch(e){}if(u.el)u.el.srcObject=null;u.src=u.gain=u.el=u.an=null;}

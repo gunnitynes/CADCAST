@@ -22,8 +22,11 @@ h1,h2,p{margin:0}
 .ghost:hover{background:var(--paper2)}.ghost.on{background:var(--ink);color:var(--paper)}
 
 /* header: the Control Room top bar */
-.top{display:grid;grid-template-columns:auto auto minmax(0,1fr) auto;align-items:stretch;border-bottom:3px solid var(--ink);background:var(--paper);position:sticky;top:0;z-index:5}
+.top{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto;align-items:stretch;border-bottom:3px solid var(--ink);background:var(--paper);position:sticky;top:0;z-index:5}
 .top>*{display:flex;align-items:center;padding:0 18px;min-height:64px}
+.crlogo{display:grid;align-content:center;gap:0;padding:0 18px;border-right:3px solid var(--ink);text-decoration:none;cursor:pointer;background:var(--paper)}
+.crlogo b{font:900 26px/.8 var(--disp);font-stretch:62%;text-transform:uppercase;letter-spacing:.005em;color:var(--ink)}.crlogo b+b{color:var(--red);margin-top:2px}
+.crlogo:hover b:first-child{color:var(--red)}.crlogo:hover b+b{color:var(--ink)}
 .word{flex-direction:column;align-items:flex-start;justify-content:center;gap:0;border-right:3px solid var(--ink)}
 .word b{font:900 26px/.9 var(--disp);font-stretch:62%;letter-spacing:.01em;text-transform:uppercase}
 .word span{font:700 9.5px var(--mono);text-transform:uppercase;letter-spacing:.14em;color:var(--red)}
@@ -112,6 +115,7 @@ body.compact .share .hint{display:none}body.compact .qr img,body.compact .qr can
 .foot{margin-top:26px;display:flex;gap:22px;flex-wrap:wrap;font:400 11px var(--mono);color:var(--ink2);border-top:3px solid var(--ink);padding-top:10px}
 .foot b{color:var(--ink)}
 .err{display:none;margin-top:16px;padding:12px 14px;border:3px solid var(--red);background:var(--paper);color:var(--red);font-weight:700}
+.flash{position:fixed;left:50%;top:78px;transform:translate(-50%,-20px);opacity:0;pointer-events:none;z-index:60;font:800 16px var(--disp);padding:12px 18px;border:3px solid var(--ink);background:var(--yel);color:#161514;box-shadow:5px 5px 0 var(--ink);transition:.25s}.flash.on{opacity:1;transform:translate(-50%,0)}
 .cover{position:fixed;inset:0;background:var(--paper);display:none;place-items:center;text-align:center;padding:30px;z-index:50}.cover.show{display:grid}
 .cover h2{font:900 clamp(34px,6vw,72px)/.9 var(--disp);font-stretch:62%;text-transform:uppercase;margin:0 0 14px}.cover p{color:var(--ink2);max-width:34em;margin:0 auto;font-size:17px}
 .cover h2::before{content:"";display:block;width:34px;height:34px;margin:0 auto 18px;background:var(--red);border:3px solid var(--ink);border-radius:50%}
@@ -121,10 +125,13 @@ body.projector .tools,body.projector .strips,body.projector .foot,body.projector
 body.projector .share{grid-template-columns:1fr;text-align:center;justify-items:center;padding:40px;box-shadow:12px 12px 0 var(--ink)}
 body.projector .golink{font-size:min(6vw,72px)}body.projector .share .hint{display:block;font-size:20px}
 body.projector .qr img,body.projector .qr canvas{width:min(46vh,520px);height:min(46vh,520px)}
-@media(max-width:900px){.top{grid-template-columns:auto minmax(0,1fr)}.shapes{display:none}.tools{grid-column:1/-1;border-top:3px solid var(--ink);justify-content:flex-start}}
+@media(max-width:1400px){.shapes{display:none}}
+.count{white-space:nowrap}
+@media(max-width:900px){.top{grid-template-columns:auto auto minmax(0,1fr)}.shapes{display:none}.tools{grid-column:1/-1;border-top:3px solid var(--ink);justify-content:flex-start}}
 @media(max-width:700px){.share{grid-template-columns:1fr}}
 </style></head><body>
 <header class=top>
+  <a class=crlogo id=crback href="../../Control-Room/?host" title="Back to Control Room (this patch bay keeps running)"><b>Control</b><b>Room</b></a>
   <div class=word><b>CADCAST</b><span>Patch bay · Control Room</span></div>
   <div class=shapes aria-hidden=true><i></i><i></i><i></i></div>
   <div class=count><span class=dot id=sdot></span><b id=count>0</b><span class=lab>plugged<br>in</span>
@@ -392,6 +399,18 @@ $('#vol').oninput=e=>{master=+e.target.value;localStorage.cp_vol=master;gains();
 // the theme is Control Room's own (same site): flipping it here flips it there too
 const setTheme=n=>{if(n==='night')document.documentElement.dataset.theme='night';else delete document.documentElement.dataset.theme;};
 $('#theme').onclick=()=>{const n=document.documentElement.dataset.theme==='night'?'paper':'night';setTheme(n);try{localStorage.setItem('controlroom.theme',JSON.stringify(n));}catch(e){}};
+// back to Control Room without closing this tab: its host tab is named 'controlroom-host', so window.open('', name)
+// brings it to the front; if there is none (it was closed), that new tab opens Control Room
+// (window.open finds it when Control Room opened this tab). If it finds nothing but a Control Room is still running in
+// another tab (it answers on BroadcastChannel 'cr-host'), say so instead of starting a second room.
+let crAlive=0;const hostch=window.BroadcastChannel?new BroadcastChannel('cr-host'):null;
+if(hostch){hostch.onmessage=e=>{if(e.data==='alive')crAlive=Date.now();};const ping=()=>hostch.postMessage('alive?');ping();setInterval(ping,4000);}
+function flash(t){let f=$('#flash');if(!f){document.body.insertAdjacentHTML('beforeend','<div class=flash id=flash></div>');f=$('#flash');}f.textContent=t;f.classList.add('on');clearTimeout(flash.t);flash.t=setTimeout(()=>f.classList.remove('on'),5000);}
+$('#crback').onclick=e=>{e.preventDefault();const url=new URL(e.currentTarget.href,location.href).href;let w=null;try{w=window.open('','controlroom-host');}catch(x){}
+  let blank=!w;try{blank=!w||w.location.href==='about:blank';}catch(x){}
+  if(!blank){try{w.focus();}catch(x){}return;}
+  if(Date.now()-crAlive<9000){try{if(w)w.close();}catch(x){}flash('Control Room is open in another tab of this browser: switch to it there.');return;}
+  if(w)w.location.href=url;else location.href=url;};
 $('#proj').onclick=()=>{document.body.classList.toggle('projector');render();};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.body.classList.contains('projector')){document.body.classList.remove('projector');render();}});
 const startBtn=()=>{$('#start').hidden=ac.state==='running';};ac.onstatechange=startBtn;

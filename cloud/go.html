@@ -51,6 +51,17 @@
 .go.hasm .who{font-size:clamp(36px,4.6vw,66px);max-width:38vw}
 .go.album .mission{order:-1;border:2px solid var(--live);box-shadow:0 0 0 6px rgba(0,0,0,.2),var(--shadow)}
 .go.album .mission .drop{padding:26px 16px;font-size:17px;border-color:var(--live);color:var(--fg);background:#0b0d12}
+/* the hand-in: once a file is chosen the dashed zone becomes a solid card that says where the file is */
+.hand{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 16px;align-items:center;padding:18px 20px;border-radius:16px;border:2px solid var(--wait);background:#1c1608;text-align:left;cursor:default}
+.hand .hi{grid-row:span 3;width:58px;height:58px;border-radius:14px;display:grid;place-items:center;font:900 15px ui-monospace,Menlo,monospace;background:var(--wait);color:#231a05}
+.hand .hn{font-weight:800;font-size:18px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hand .hs{font-size:14px;color:var(--dim)}.hand .hs b{color:var(--fg)}
+.hand .hm{height:10px;border-radius:5px;background:#0006;overflow:hidden}.hand .hm i{display:block;height:100%;width:0;background:var(--wait);transition:width .2s}
+.hand .hx{grid-column:1/-1;margin-top:8px;font-size:13px;color:var(--dim)}.hand .hx button{font-size:13px;padding:8px 12px;border-radius:10px;margin-left:6px}
+.hand.ok{border-color:var(--live);background:#08200f}.hand.ok .hi{background:var(--live);color:#04210f;font-size:30px}.hand.ok .hm{display:none}
+.hand.warn{border-color:var(--wait)}.hand.bad{border-color:var(--off);background:#240a0e}.hand.bad .hi{background:var(--off);color:#fff;font-size:30px}.hand.bad .hm{display:none}
+.hand.sending .hi{animation:hpulse 1s ease-in-out infinite}@keyframes hpulse{50%{opacity:.45}}
+.timesup{margin:0;padding:12px 16px;border-radius:12px;background:var(--wait);color:#231a05;font-weight:800;font-size:16px;text-align:center}
 .dropall{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(7,8,11,.88);border:6px dashed var(--live);font-size:clamp(30px,5vw,60px);font-weight:900;letter-spacing:-.03em;text-align:center;pointer-events:none}
 .dropall small{display:block;font-size:18px;font-weight:600;color:var(--dim);letter-spacing:0;margin-top:10px}
 .relay{width:min(520px,92vw);text-align:left;background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:22px;padding:22px 24px;display:grid;gap:12px;box-shadow:var(--shadow)}
@@ -137,7 +148,7 @@ async function startPeer(){await iceReady();if(peer&&!peer.destroyed)peer.destro
     if(m.t==='paired'){if(!/^controlroom-v1-[a-z0-9]{4,8}$/.test(from)||!m.name||!m.desk)return;
       pair={name:String(m.name).slice(0,40),desk:String(m.desk).slice(0,60),room:from.slice(15),at:Date.now()};localStorage.cc_pair=JSON.stringify(pair);showErr('');view();plug();return;}
     const ok=[pair&&(pair.room||String(pair.desk||'').replace('cadcast-desk-','')),room].filter(Boolean).map(r=>'controlroom-v1-'+String(r).toLowerCase());if(!pair||!ok.includes(from))return;   // the room it paired in, or the teacher's current room (the lobby only answers for the teacher's own Control Room)
-    hostC=c;
+    if(hostC!==c){hostC=c;c.on('error',()=>{c.bad=true;});c.on('close',()=>{c.bad=true;});}
     if(m.t==='rec-start')return recStart(m);
     if(m.t==='rec-stop')return recStop();
     if(m.t==='file')return gotChunk(m);
@@ -231,8 +242,9 @@ try{const m=JSON.parse(localStorage.cc_mission||'null');if(m&&(m.ends>Date.now()
 let hostC=null,recorder=null,recChunks=[],recT0=0,recTick=0,recRound=0,recProject=false,recMax=0;
 const B64=u8=>{let s='';for(let i=0;i<u8.length;i+=8192)s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));return btoa(s);};
 const UNB64=t=>{const s=atob(t),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
-const toHost=m=>{if(hostC&&hostC.open)try{hostC.send(m);return true;}catch(e){}return false;};
-async function sendFile(meta,blob,prog){const u8=new Uint8Array(await blob.arrayBuffer()),CH=48000,n=Math.max(1,Math.ceil(u8.length/CH)),fid=rnd();
+const toHost=m=>{if(hostC&&hostC.open&&!hostC.bad)try{hostC.send(m);return true;}catch(e){}return false;};
+// a chunk must stay under 16 KB once JSON-encoded: PeerJS 1.5 silently refuses bigger messages on a 'json' connection
+async function sendFile(meta,blob,prog){const u8=new Uint8Array(await blob.arrayBuffer()),CH=11000,n=Math.max(1,Math.ceil(u8.length/CH)),fid=rnd();
   for(let i=0;i<n;i++){for(let k=0;hostC&&hostC.dataChannel&&hostC.dataChannel.bufferedAmount>1.5e6&&k<600;k++)await new Promise(r=>setTimeout(r,50));
     if(!toHost({t:'file',fid,i,n,meta:i?null:{...meta,size:u8.length,mime:blob.type},data:B64(u8.subarray(i*CH,(i+1)*CH))}))return false;if(prog)prog((i+1)/n);}return true;}
 function recView(h){const r=$('#rec');r.hidden=!h;r.innerHTML=h||'';}
@@ -269,18 +281,30 @@ function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(
     <div id=afiles ${(m.files||[]).length?'':'hidden'}>${(m.files||[]).map((r,i)=>`<div class=file id=af${i}><div class=ico>…</div><b>Making the starter…</b><span></span></div>`).join('')}</div>
     <div class=drop id=adrop>When it’s done: export <b>bars 1 to ${m.bars+1}</b> (exactly ${m.bars} bars, from the start of bar 1) as WAV and <b>drop the file here</b>.</div><p class=got id=agot></p>
     ${(m.files||[]).length?'<p class=hint>Starter files: drag them into your DAW.</p>':'<p class=hint>Or drop the file anywhere on this page.</p>'}`;
-  clearInterval(mclockT);mclockT=setInterval(()=>{const c=$('#mclock');if(!c||!album)return;if(!album.ends){c.textContent='';return;}const left=album.ends-Date.now();c.textContent=left>0?fmtLeft(left):'time';},500);
+  clearInterval(mclockT);mclockT=setInterval(()=>{const c=$('#mclock');if(!c||!album)return;if(!album.ends){c.textContent='';return;}const left=album.ends-Date.now();c.textContent=left>0?fmtLeft(left):'time’s up';
+    if(left<=0&&!$('#atime')&&!$('#adrop.hand.ok')){const d=$('#adrop');if(d)d.insertAdjacentHTML('beforebegin','<p class=timesup id=atime>Time’s up! Export your part now and drop it here: the hand-in is still open.</p>');}},500);
   (m.files||[]).forEach((rc,i)=>ASSETS.make(rc).then(f=>{if(album!==m)return;const url=URL.createObjectURL(new Blob([f.bytes],{type:f.mime}));albumURLs.push(url);const wav=f.mime==='audio/wav',el=$('#af'+i);if(!el)return;
     el.draggable=true;el.ondragstart=e=>{e.dataTransfer.setData('DownloadURL',`${f.mime}:${f.name}:${url}`);e.dataTransfer.effectAllowed='copy';};
     el.innerHTML=`<div class="ico ${wav?'wav':''}">${wav?'WAV':'MIDI'}</div><b>${esc(f.name)}</b><span>${esc(rc.what||f.info)}</span><div class=acts><a href="${url}" download="${esc(f.name)}">⬇ Download</a><button>▶ Listen</button></div>`;
     let h=null;const b=el.querySelector('button');b.onclick=()=>{if(h){h.stop();h=null;b.textContent='▶ Listen';return;}h=ASSETS.preview(f);b.textContent='■ Stop';};
   }).catch(e=>{const el=$('#af'+i);if(el)el.innerHTML=`<div class=ico>!</div><b>Could not make the file</b><span>${esc(e.message)}</span>`;}));
-  const d=$('#adrop'),go=async f=>{if(!f)return;if(f.size>200e6){d.textContent='That file is over 200 MB.';return;}
-    if(!/^audio\//.test(f.type)&&!/\.(wav|aif|aiff|mp3|flac|m4a|ogg)$/i.test(f.name)){d.innerHTML='That isn’t an audio file. Export your part as <b>WAV</b> and drop it here.';return;}
-    d.innerHTML=`Sending <b>${esc(f.name)}</b>…<div class=meter><i id=adm></i></div>`;$('#agot').textContent='';
-    const ok=await sendFile({kind:'part',round:m.round,name:f.name},f,x=>{const i=$('#adm');if(i)i.style.width=Math.round(x*100)+'%';});
-    d.innerHTML=ok?`<b>${esc(f.name)}</b> sent. Drop a new export here to replace it.`:'Could not reach Control Room. Drop it again.';};
-  d.onclick=()=>{const i=document.createElement('input');i.type='file';i.accept='audio/*,.wav,.aif,.aiff';i.onchange=()=>go(i.files[0]);i.click();};
+  // the hand-in, step by step: chosen → sending (%) → delivered, waiting for Control Room to check it → received ✓ (album-got)
+  // or not delivered. No answer within 30 s after sending counts as not delivered.
+  const d=$('#adrop'),mb=n=>n>1e6?(n/1e6).toFixed(1)+' MB':Math.max(1,Math.round(n/1e3))+' KB';
+  const card=(cls,ico,line,sub,extra)=>{d.className='hand '+cls;d.innerHTML=`<div class=hi>${ico}</div><div class=hn>${line}</div><div class=hs>${sub}</div><div class=hm><i id=adm></i></div>${extra?`<div class=hx>${extra}</div>`:''}`;};
+  const again='<button id=aagain>Choose another file</button>',bindAgain=()=>{const b=$('#aagain');if(b)b.onclick=e=>{e.stopPropagation();pickFile();};};
+  const go=async f=>{if(!f)return;clearTimeout(albumAck);
+    if(f.size>200e6){card('bad','!',esc(f.name),'That file is over 200 MB. Export a shorter WAV.',again);bindAgain();return;}
+    if(!/^audio\//.test(f.type)&&!/\.(wav|aif|aiff|mp3|flac|m4a|ogg)$/i.test(f.name)){card('bad','!',esc(f.name),'That isn’t an audio file. Export your part as <b>WAV</b>.',again);bindAgain();return;}
+    $('#agot').textContent='';album.sent=f.name;
+    card('sending','WAV',esc(f.name),`<b>Sending to Control Room…</b> ${mb(f.size)} · <span id=apct>0 %</span>`);
+    const ok=await sendFile({kind:'part',round:m.round,name:f.name},f,x=>{const i=$('#adm'),t=$('#apct');if(i)i.style.width=Math.round(x*100)+'%';if(t)t.textContent=Math.round(x*100)+' %';});
+    if(album!==m)return;
+    if(!ok){card('bad','✕',esc(f.name),'<b>Not delivered.</b> This computer lost the connection to Control Room.',`Check you’re still connected (right), then ${again}`);bindAgain();return;}
+    card('sending','WAV',esc(f.name),'<b>Delivered.</b> Control Room is checking it…');const i=$('#adm');if(i)i.style.width='100%';
+    albumAck=setTimeout(()=>{if(album!==m||album.sent!==f.name)return;card('bad','?',esc(f.name),'<b>No answer from Control Room.</b> Your teacher may not have it.',`Tell your teacher, or ${again}`);bindAgain();},30000);};
+  const pickFile=()=>{const i=document.createElement('input');i.type='file';i.accept='audio/*,.wav,.aif,.aiff';i.onchange=()=>go(i.files[0]);i.click();};
+  d.onclick=()=>{if(!d.classList.contains('hand'))pickFile();};
   albumDrop=go;setTimeout(()=>box.scrollIntoView({behavior:'smooth',block:'center'}),300);}
 // while the album is open, a file dropped ANYWHERE on this page is the part
 let albumDrop=null,dragN=0;const dropAll=on=>{let o=$('#dropall');if(on&&!o){document.body.insertAdjacentHTML('beforeend','<div class=dropall id=dropall><div>Drop your part<small>it goes to Control Room for the class song</small></div></div>');}if(!on&&o)o.remove();};
@@ -288,14 +312,17 @@ addEventListener('dragenter',e=>{if(!album||!albumDrop||![...(e.dataTransfer.typ
 addEventListener('dragleave',()=>{if(!album)return;dragN=Math.max(0,dragN-1);if(!dragN)dropAll(false);});
 addEventListener('dragover',e=>{if(album&&albumDrop)e.preventDefault();});
 addEventListener('drop',e=>{dragN=0;dropAll(false);if(!album||!albumDrop)return;e.preventDefault();const f=e.dataTransfer.files[0];if(f)albumDrop(f);});
-function albumGot(m){const g=$('#agot');if(!g||!album)return;g.textContent=m.text||'';g.classList.toggle('bad',!m.ok);}
+let albumAck=0;
+function albumGot(m){const d=$('#adrop');if(!d||!album)return;clearTimeout(albumAck);const name=esc(album.sent||'Your part');
+  d.className='hand '+(m.ok?'ok':'warn');d.innerHTML=`<div class=hi>${m.ok?'✓':'!'}</div><div class=hn>${m.ok?'Received by Control Room':name}</div><div class=hs>${m.ok?name+' · ':''}${esc(m.text||'')}</div><div class=hx>${m.ok?'Done. To change it, drop a new export anywhere on this page.':'Fix it and drop a new export anywhere on this page.'}</div>`;
+  const t=$('#atime');if(t)t.remove();}
 function albumEnd(){album=null;albumDrop=null;localStorage.removeItem('cc_album');const d=$('#adrop');if(d)d.outerHTML='<p class=over>Hand-in closed. The class is arranging the song on the big screen.</p>';clearInterval(mclockT);const c=$('#mclock');if(c)c.textContent='';}
 try{const m=JSON.parse(localStorage.cc_album||'null');if(m&&Date.now()-(m.at||0)<3*3600e3)albumShow(m);}catch(e){}
 
 // incoming: the track to grow (a recording, decoded and handed over as WAV for the DAW) or a project file
 const IN=new Map();let relayURLs=[];
-function gotChunk(m){if(!(Number.isInteger(m.n)&&m.n>0&&m.n<=8000&&Number.isInteger(m.i)&&m.i>=0&&m.i<m.n&&typeof m.data==='string'&&m.data.length<70000))return;
-  let f=IN.get(m.fid);if(!f){if(IN.size>=6)return;IN.set(m.fid,f={parts:[],got:0,n:m.n,meta:null});}if(m.meta)f.meta=m.meta;if(!f.parts[m.i]){f.parts[m.i]=UNB64(m.data);f.got++;}
+function gotChunk(m){if(!(Number.isInteger(m.n)&&m.n>0&&m.n<=32000&&Number.isInteger(m.i)&&m.i>=0&&m.i<m.n&&typeof m.data==='string'&&m.data.length<16000))return;
+  let f=IN.get(m.fid);if(!f){for(const [k,v] of IN)if(Date.now()-v.at>600000)IN.delete(k);if(IN.size>=6)return;IN.set(m.fid,f={parts:[],got:0,n:m.n,meta:null,at:0});}f.at=Date.now();if(m.meta)f.meta=m.meta;if(!f.parts[m.i]){f.parts[m.i]=UNB64(m.data);f.got++;}
   if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';}
   if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}));}}
 function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');

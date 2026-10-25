@@ -49,7 +49,22 @@
 .mission .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.mission .facts div{background:#0b0d12;border-radius:12px;padding:10px 12px}.mission .facts small{display:block;color:var(--mute);font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}.mission .facts b{font-size:20px}
 .mission .got{font-weight:700;font-size:14px;color:var(--live)}.mission .got.bad{color:var(--wait)}
 .go.hasm .who{font-size:clamp(36px,4.6vw,66px);max-width:38vw}
-.go.album .mission{order:-1;border:2px solid var(--live);box-shadow:0 0 0 6px rgba(0,0,0,.2),var(--shadow)}
+.go.album #mission:not(.stale){border:2px solid var(--live);box-shadow:0 0 0 6px rgba(0,0,0,.2),var(--shadow)}
+/* with material on the page: one column. The computer's name and plug shrink into a strip at the top; the cards follow,
+   newest first (arrange()); finished ones (.stale) dim and sink to the bottom */
+.go.hasm{flex-direction:column;flex-wrap:nowrap;justify-content:flex-start;align-items:center;gap:16px;padding:84px 20px 40px}
+.go.hasm .live{order:0;width:min(820px,94vw);display:grid;grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"jack lab again" "jack who again" "jack sub again";gap:0 18px;align-items:center;text-align:left;padding:12px 18px;border:1px solid var(--line);border-radius:18px;background:#0f1218}
+.go.hasm .jack{grid-area:jack;width:62px;font-size:0;gap:0}.go.hasm .jack svg{width:22px;height:22px}.go.hasm .jack .ring{inset:-6px;border-width:2px}
+.go.hasm .whoLab{grid-area:lab;margin:0;font-size:11px}
+.go.hasm .who{grid-area:who;font-size:clamp(24px,3vw,34px);max-width:none;line-height:1.05}
+.go.hasm .sub{grid-area:sub;font-size:13px;min-height:0}.go.hasm .dev{display:none}
+.go.hasm .again{grid-area:again;font-size:12px;padding:7px 10px}
+.go.hasm .mission,.go.hasm .relay{width:min(820px,94vw)}
+.go.hasm .stale{opacity:.55;border-color:var(--line)!important;box-shadow:none!important}
+.go.hasm .stale:hover{opacity:.9}
+.go.hasm .err{order:99}
+@media(max-width:640px){.go.hasm .live{grid-template-areas:"jack lab" "jack who" "sub sub" "again again";grid-template-columns:auto minmax(0,1fr)}}
+.mission .tip2{margin:0;font-size:13px;color:var(--dim);border-left:3px solid var(--live);padding-left:10px}.mission .tip2 b{color:var(--fg)}
 .go.album .mission .drop{padding:26px 16px;font-size:17px;border-color:var(--live);color:var(--fg);background:#0b0d12}
 /* the hand-in: once a file is chosen the dashed zone becomes a solid card that says where the file is */
 .hand{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 16px;align-items:center;padding:18px 20px;border-radius:16px;border:2px solid var(--wait);background:#1c1608;text-align:left;cursor:default}
@@ -110,6 +125,7 @@
     <div class=sub id=sub></div><div class=dev id=dev></div>
     <button class=again id=again>Not you? Show the code again</button>
   </section>
+  <section class="mission take" id=take hidden></section>
   <section class=mission id=mission hidden></section>
   <section class=relay id=relay hidden></section>
   <div class=rec id=rec hidden></div>
@@ -178,6 +194,10 @@ async function startPeer(){await iceReady();if(peer&&!peer.destroyed)peer.destro
     if(m.t==='rec-stop')return recStop();
     if(m.t==='ping')return toHost({t:'pong',k:m.k});
     if(m.t==='file')return gotChunk(m);
+    if(m.t==='file-link')return gotLink(m);
+    if(m.t==='take-in')return takeShow(m);
+    if(m.t==='take-got')return takeGot(m);
+    if(m.t==='take-end')return takeEnd();
     if(m.t==='relay-note')return relayNote(m);
     if(m.t==='mission'&&m.m)return showMission(m.m);
     if(m.t==='mission-end')return endMission(m.round);
@@ -250,7 +270,7 @@ addEventListener('pagehide',()=>{if(want&&desk&&desk.open)try{desk.send({type:'b
 // ---------- missions from Control Room's Constraint Generator: the file is built here from its recipe
 let mission=null,mclockT=0,fileURL=null,album=null,albumURLs=[];
 function fmtLeft(ms){const s=Math.max(0,Math.round(ms/1000));return Math.floor(s/60)+':'+String(s%60).padStart(2,'0');}
-function showMission(m){mission=m;album=null;document.querySelector('.go').classList.remove('album');localStorage.removeItem('cc_album');localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
+function showMission(m){setTimeout(()=>bump('mission'),0);mission=m;album=null;document.querySelector('.go').classList.remove('album');localStorage.removeItem('cc_album');localStorage.cc_mission=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm');
   box.innerHTML=`<div class=mh><span>${m.rounds?`Round ${m.round} of ${m.rounds} · `:'Constraint · '}${esc(m.label)}</span><span class=mclock id=mclock></span></div><p class=lead>${esc(m.lead)}</p><h2>${esc(m.task)}</h2>
     <span class=rule>${esc(m.cat)} · ${esc(m.rule)}</span><div class=file id=file><div class="ico">…</div><b>Making your file…</b><span>${m.tempo?esc(m.tempo):'Fit it to your track'}</span></div>
     <p class=hint>Drag the file into your DAW, or download it. Tap Done on your phone when you’ve made it happen.</p>`;
@@ -260,7 +280,7 @@ function showMission(m){mission=m;album=null;document.querySelector('.go').class
     el.innerHTML=`<div class="ico ${wav?'wav':''}">${wav?'WAV':'MIDI'}</div><b>${esc(f.name)}</b><span>${esc(f.info)}</span><div class=acts><a href="${fileURL}" download="${esc(f.name)}">⬇ Download</a><button id=flisten>▶ Listen</button></div>`;
     let h=null;$('#flisten').onclick=()=>{if(h){h.stop();h=null;$('#flisten').textContent='▶ Listen';return;}h=ASSETS.preview(f);$('#flisten').textContent='■ Stop';};
   }).catch(e=>{$('#file').innerHTML=`<div class=ico>!</div><b>Could not make the file</b><span>${esc(e.message)}</span>`;});}
-function endMission(round){if(!mission||mission.round!==round)return;const c=$('#mclock');if(c)c.textContent='time';
+function endMission(round){if(!mission||mission.round!==round)return;bump('mission',true);const c=$('#mclock');if(c)c.textContent='time';
   if(!$('#mission .over'))$('#mission').insertAdjacentHTML('beforeend','<p class=over>Round over. Keep the file: next round builds on it.</p>');localStorage.removeItem('cc_mission');}
 try{const m=JSON.parse(localStorage.cc_mission||'null');if(m&&(m.ends>Date.now()||!m.ends&&Date.now()-(m.at||0)<3*3600e3))showMission(m);}catch(e){}
 
@@ -269,8 +289,29 @@ let hostC=null,recorder=null,recChunks=[],recT0=0,recTick=0,recRound=0,recProjec
 const B64=u8=>{let s='';for(let i=0;i<u8.length;i+=8192)s+=String.fromCharCode.apply(null,u8.subarray(i,i+8192));return btoa(s);};
 const UNB64=t=>{const s=atob(t),u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u;};
 const toHost=m=>{if(hostC&&hostC.open&&!hostC.bad)try{hostC.send(m);return true;}catch(e){}return false;};
+// FILE LINKS: when the Worker has file storage (GET /drop/ok), a file goes up once over HTTPS and only its link travels
+// over the relay ({t:'file-link'}); the other side downloads it. Much faster than pushing it through the data channel.
+// ?files=<url> points at another Worker (testing on localhost only).
+const FILES_URL=location.hostname==='localhost'&&new URLSearchParams(location.search).get('files')||TURN_URL;
+let filesOk=null,filesAt=0;
+async function filesReady(){if(filesOk!==null&&Date.now()-filesAt<300000)return filesOk;filesAt=Date.now();
+  try{const r=await fetch(FILES_URL+'/drop/ok',{cache:'no-store'});filesOk=r.ok&&!!(await r.json()).ok;}catch(e){filesOk=false;}return filesOk;}
+function filesPut(blob,name,prog){return new Promise(res=>{const x=new XMLHttpRequest();x.open('POST',FILES_URL+'/drop');x.setRequestHeader('Content-Type',blob.type||'application/octet-stream');x.setRequestHeader('X-Name',encodeURIComponent(name||'file'));
+  x.upload.onprogress=e=>{if(prog&&e.lengthComputable)prog(e.loaded/e.total);};x.onload=()=>{try{res(x.status===200?JSON.parse(x.responseText).url:null);}catch(e){res(null);}};x.onerror=()=>res(null);x.send(blob);});}
+// download a link with progress; a brand-new file can take a moment to show up everywhere, so a 404 is retried for a minute
+async function filesGet(url,prog){const t0=Date.now();for(;;){let r=null;try{r=await fetch(url,{cache:'no-store'});}catch(e){}
+    if(r&&r.ok){const n=+r.headers.get('Content-Length')||0,rd=r.body.getReader(),parts=[];let got=0;for(;;){const {done,value}=await rd.read();if(done)break;parts.push(value);got+=value.length;if(prog&&n)prog(got/n);}return new Blob(parts);}
+    if(Date.now()-t0>60000)return null;await new Promise(z=>setTimeout(z,2500));}}
+const linkOK=u=>typeof u==='string'&&(u.startsWith(FILES_URL+'/drop/')||u.startsWith(TURN_URL+'/drop/'));
+async function gotLink(m){if(!m.meta||!linkOK(m.url))return;const fid=String(m.fid||rnd()).slice(0,20),meta=m.meta;
+  const step=x=>{if(meta.kind==='drop')dropArriving(fid,meta,x);else{if(x===0)relayBox(meta,null,{});const p=$('#relm'),t=$('#relp');if(p)p.style.width=Math.round(100*x)+'%';if(t)t.textContent=Math.round(100*x)+' %';}};
+  step(0);const blob=await filesGet(m.url,step);
+  if(!blob){if(meta.kind==='drop')dropStalled(fid);else{const a=$('#relarr');if(a)a.innerHTML=`<div class=ico style="background:var(--off);color:#fff">!</div><b>${esc(meta.name||'A file')} didn’t arrive</b><span>Ask your teacher to send it again.</span>`;}return;}
+  relayFile(meta,new Blob([blob],{type:meta.mime||''}),fid);toHost({t:'file-ok',fid,kind:meta.kind,round:meta.round,name:meta.name});}
 // a chunk must stay under 16 KB once JSON-encoded: PeerJS 1.5 silently refuses bigger messages on a 'json' connection
-async function sendFile(meta,blob,prog){const u8=new Uint8Array(await blob.arrayBuffer()),CH=11000,n=Math.max(1,Math.ceil(u8.length/CH)),fid=rnd();
+async function sendFile(meta,blob,prog){
+  if(blob.size>150e3&&blob.size<=90e6&&await filesReady()){const url=await filesPut(blob,meta.name||'file',prog);
+    if(url)return toHost({t:'file-link',fid:rnd(),meta:{...meta,size:blob.size,mime:blob.type},url});}const u8=new Uint8Array(await blob.arrayBuffer()),CH=11000,n=Math.max(1,Math.ceil(u8.length/CH)),fid=rnd();
   for(let i=0;i<n;i++){for(let k=0;hostC&&hostC.dataChannel&&hostC.dataChannel.bufferedAmount>1.5e6&&k<600;k++)await new Promise(r=>setTimeout(r,50));
     if(!toHost({t:'file',fid,i,n,meta:i?null:{...meta,size:u8.length,mime:blob.type},data:B64(u8.subarray(i*CH,(i+1)*CH))}))return false;if(prog)prog((i+1)/n);}return true;}
 function recView(h){const r=$('#rec');r.hidden=!h;r.innerHTML=h||'';}
@@ -300,12 +341,12 @@ function bindDrop(){const d=$('#drop');if(!d)return;const go=async f=>{if(!f)ret
   d.onclick=()=>{const i=document.createElement('input');i.type='file';i.onchange=()=>go(i.files[0]);i.click();};}
 // ---------- The Class Album: the brief (role, tempo, key, length, starter files) and a drop zone for the exported part
 
-function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm','album');
+function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(m);const box=$('#mission');box.hidden=false;document.querySelector('.go').classList.add('hasm','album');bump('mission');
   albumURLs.forEach(u=>URL.revokeObjectURL(u));albumURLs=[];
   box.innerHTML=`<div class=mh><span>${esc(m.head||'The Class Album')}${m.title?' · '+esc(m.title):''}</span><span class=mclock id=mclock></span></div><p class=lead>Your part in the class song</p><h2>${esc(m.role)}</h2>
     <span class=rule>${esc(m.tip)}</span><div class=facts><div><small>Tempo</small><b>${m.bpm} BPM</b></div><div><small>Key</small><b>${esc(m.key)}</b></div><div><small>Length</small><b>${m.bars} bars</b></div></div>
     <div id=afiles ${(m.files||[]).length?'':'hidden'}>${(m.files||[]).map((r,i)=>`<div class=file id=af${i}><div class=ico>…</div><b>Making the starter…</b><span></span></div>`).join('')}</div>
-    <div class=drop id=adrop>When it’s done: export <b>bars 1 to ${m.bars+1}</b> (exactly ${m.bars} bars, from the start of bar 1) as WAV and <b>drop the file here</b>.</div><p class=got id=agot></p>
+    <div class=drop id=adrop>When it’s done: export <b>bars 1 to ${m.bars+1}</b> (exactly ${m.bars} bars, from the start of bar 1) and <b>drop the file here</b>.</div><p class=tip2>Export as <b>MP3</b> (320 kbps): it arrives about five times faster than a WAV.</p><p class=got id=agot></p>
     ${(m.files||[]).length?'<p class=hint>Starter files: drag them into your DAW.</p>':'<p class=hint>Or drop the file anywhere on this page.</p>'}`;
   clearInterval(mclockT);mclockT=setInterval(()=>{const c=$('#mclock');if(!c||!album)return;if(!album.ends){c.textContent='';return;}const left=album.ends-Date.now();c.textContent=left>0?fmtLeft(left):'time’s up';
     if(left<=0&&!$('#atime')&&!$('#adrop.hand.ok')){const d=$('#adrop');if(d)d.insertAdjacentHTML('beforebegin','<p class=timesup id=atime>Time’s up! Export your part now and drop it here: the hand-in is still open.</p>');}},500);
@@ -321,9 +362,9 @@ function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(
   const again='<button id=aagain>Choose another file</button>',bindAgain=()=>{const b=$('#aagain');if(b)b.onclick=e=>{e.stopPropagation();pickFile();};};
   const go=async f=>{if(!f)return;clearTimeout(albumAck);
     if(f.size>200e6){card('bad','!',esc(f.name),'That file is over 200 MB. Export a shorter WAV.',again);bindAgain();return;}
-    if(!/^audio\//.test(f.type)&&!/\.(wav|aif|aiff|mp3|flac|m4a|ogg)$/i.test(f.name)){card('bad','!',esc(f.name),'That isn’t an audio file. Export your part as <b>WAV</b>.',again);bindAgain();return;}
+    if(!/^audio\//.test(f.type)&&!/\.(wav|aif|aiff|mp3|flac|m4a|ogg)$/i.test(f.name)){card('bad','!',esc(f.name),'That isn’t an audio file. Export your part as <b>MP3</b> (or WAV).',again);bindAgain();return;}
     $('#agot').textContent='';album.sent=f.name;
-    card('sending','WAV',esc(f.name),`<b>Sending to Control Room…</b> ${mb(f.size)} · <span id=apct>0 %</span>`);
+    card('sending',(f.name.match(/\.([a-z0-9]+)$/i)||[,'WAV'])[1].toUpperCase().slice(0,4),esc(f.name),`<b>Sending to Control Room…</b> ${mb(f.size)} · <span id=apct>0 %</span>${f.size>12e6&&!/\.mp3$/i.test(f.name)?' · next time try MP3, it’s much smaller':''}`);
     const ok=await sendFile({kind:'part',round:m.round,name:f.name},f,x=>{const i=$('#adm'),t=$('#apct');if(i)i.style.width=Math.round(x*100)+'%';if(t)t.textContent=Math.round(x*100)+' %';});
     if(album!==m)return;
     if(!ok){card('bad','✕',esc(f.name),'<b>Not delivered.</b> This computer lost the connection to Control Room.',`Check you’re still connected (right), then ${again}`);bindAgain();return;}
@@ -333,16 +374,16 @@ function albumShow(m){album=m;mission=null;localStorage.cc_album=JSON.stringify(
   d.onclick=()=>{if(!d.classList.contains('hand'))pickFile();};
   albumDrop=go;setTimeout(()=>box.scrollIntoView({behavior:'smooth',block:'center'}),300);}
 // while the album is open, a file dropped ANYWHERE on this page is the part
-let albumDrop=null,dragN=0;const dropAll=on=>{let o=$('#dropall');if(on&&!o){document.body.insertAdjacentHTML('beforeend','<div class=dropall id=dropall><div>Drop your part<small>it goes to Control Room for the class song</small></div></div>');}if(!on&&o)o.remove();};
-addEventListener('dragenter',e=>{if(!album||!albumDrop||![...(e.dataTransfer.types||[])].includes('Files'))return;dragN++;dropAll(true);});
-addEventListener('dragleave',()=>{if(!album)return;dragN=Math.max(0,dragN-1);if(!dragN)dropAll(false);});
-addEventListener('dragover',e=>{if(album&&albumDrop)e.preventDefault();});
-addEventListener('drop',e=>{dragN=0;dropAll(false);if(!album||!albumDrop)return;e.preventDefault();const f=e.dataTransfer.files[0];if(f)albumDrop(f);});
+let albumDrop=null,dragN=0;const dropAll=on=>{let o=$('#dropall');if(on&&!o){document.body.insertAdjacentHTML('beforeend','<div class=dropall id=dropall><div>Drop it here<small>it goes to Control Room</small></div></div>');}if(!on&&o)o.remove();};
+addEventListener('dragenter',e=>{if(!(takeDrop||(album&&albumDrop))||![...(e.dataTransfer.types||[])].includes('Files'))return;dragN++;dropAll(true);});
+addEventListener('dragleave',()=>{if(!album&&!takeDrop)return;dragN=Math.max(0,dragN-1);if(!dragN)dropAll(false);});
+addEventListener('dragover',e=>{if((album&&albumDrop)||takeDrop)e.preventDefault();});
+addEventListener('drop',e=>{dragN=0;dropAll(false);if(takeDrop){e.preventDefault();const f=e.dataTransfer.files[0];if(f)takeDrop(f);return;}if(!album||!albumDrop)return;e.preventDefault();const f=e.dataTransfer.files[0];if(f)albumDrop(f);});
 let albumAck=0;
 function albumGot(m){const d=$('#adrop');if(!d||!album)return;clearTimeout(albumAck);const name=esc(album.sent||'Your part');
   d.className='hand '+(m.ok?'ok':'warn');d.innerHTML=`<div class=hi>${m.ok?'✓':'!'}</div><div class=hn>${m.ok?'Received by Control Room':name}</div><div class=hs>${m.ok?name+' · ':''}${esc(m.text||'')}</div><div class=hx>${m.ok?'Done. To change it, drop a new export anywhere on this page.':'Fix it and drop a new export anywhere on this page.'}</div>`;
   const t=$('#atime');if(t)t.remove();}
-function albumEnd(){album=null;albumDrop=null;localStorage.removeItem('cc_album');const d=$('#adrop');if(d)d.outerHTML='<p class=over>Hand-in closed. The class is arranging the song on the big screen.</p>';clearInterval(mclockT);const c=$('#mclock');if(c)c.textContent='';}
+function albumEnd(){album=null;albumDrop=null;localStorage.removeItem('cc_album');bump('mission',true);const d=$('#adrop');if(d)d.outerHTML='<p class=over>Hand-in closed. The class is arranging the song on the big screen.</p>';clearInterval(mclockT);const c=$('#mclock');if(c)c.textContent='';}
 try{const m=JSON.parse(localStorage.cc_album||'null');if(m&&Date.now()-(m.at||0)<3*3600e3)albumShow(m);}catch(e){}
 
 // incoming: the track to grow (a recording, decoded and handed over as WAV for the DAW) or a project file
@@ -354,7 +395,7 @@ function gotChunk(m){if(!(Number.isInteger(m.n)&&m.n>0&&m.n<=32000&&Number.isInt
   // nothing more for 20 s: say so instead of sitting on "Arriving…" forever
   clearTimeout(f.dog);if(f.got<f.n)f.dog=setTimeout(()=>{if(IN.get(m.fid)!==f)return;IN.delete(m.fid);if(f.meta&&f.meta.kind==='drop'){dropStalled(m.fid);return;}const a=$('#relarr');if(a)a.innerHTML=`<div class=ico style="background:var(--off);color:#fff">!</div><b>${esc((f.meta||{}).name||'A file')} didn’t arrive completely</b><span>The connection dropped. Ask your teacher to send it again.</span>`;},20000);
   if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}),m.fid);toHost({t:'file-ok',fid:m.fid,kind:f.meta.kind,round:f.meta.round,name:f.meta.name});/* the receipt: Control Room ticks it only now */}}
-function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;if(box.dataset.round==='drops'){box.className='relay';box.dataset.round='';}document.querySelector('.go').classList.add('hasm');
+function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;if(box.dataset.round==='drops'){box.className='relay';box.dataset.round='';}bump('relay');document.querySelector('.go').classList.add('hasm');
   const head=meta.kind==='album'?`<div class=mh>The Class Album · from your class</div><h2>${esc(meta.title||'Our song')}</h2>`:meta.kind==='drop'?`<div class=mh>${meta.head?esc(meta.head):`Supply drop ${meta.round} · from your teacher`}</div><h2>${esc(meta.title||'Your material')}</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
   if(!file){if(meta.kind==='drop'&&box.dataset.round==='d'+meta.round||meta.kind==='album'&&box.dataset.round==='a'+meta.round)return;box.innerHTML=head+`<div class=file id=relarr><div class=ico>…</div><b>Arriving: ${esc(meta.name||'a file')}</b><span><span id=relp>0 %</span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
   relayURLs.push(file.url);const el=document.createElement('div');el.className='file';el.draggable=true;
@@ -366,6 +407,8 @@ async function relayFile(meta,blob,fid){
   if(meta.kind==='album'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||'The Class Album.wav',mime:blob.type||'audio/wav',info:(blob.size/1e6).toFixed(1)+' MB · '+(meta.what||'the class mix'),wav:true,tag:'WAV'});return;}
   if(meta.kind==='drop')return dropGot(fid,meta,blob);
   const base=`Stop ${meta.round+1} from ${String(meta.from||'someone').replace(/[\\/:*?"<>|]/g,'')}`;
+  const ax=(String(meta.name||'').match(/\.(mp3|wav|aif|aiff|m4a|flac|ogg)$/i)||[])[1];
+  if(meta.kind==='take'&&ax){relayBox(meta,{url:URL.createObjectURL(blob),name:base+'.'+ax.toLowerCase(),mime:blob.type||'audio/mpeg',info:(blob.size/1e6).toFixed(1)+' MB · '+ax.toUpperCase(),wav:true,tag:ax.toUpperCase().slice(0,4)});return;}
   if(meta.kind==='project'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||base+'.zip',mime:blob.type||'application/zip',info:Math.round(blob.size/1e6)+' MB project',wav:false});return;}
   try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const buf=await ac.decodeAudioData(await blob.arrayBuffer());
     const wav=wavOf(buf);relayBox(meta,{url:URL.createObjectURL(wav),name:base+'.wav',mime:'audio/wav',info:Math.round(buf.duration)+' s · WAV',wav:true});}
@@ -392,7 +435,7 @@ function dropTile(d){const info=`${d.size?dSize(d.size):''}${d.label?' · '+esc(
   if(d.st==='bad')return `<div class="tile bad" data-f="${d.fid}"><div class=tt><div class=tx>!</div><div class=tn>${esc(d.name)}</div></div><div class=ti>Didn’t arrive completely. Ask your teacher to drop again.</div></div>`;
   return `<div class="tile k-${d.kind}${d.dl?' dl':''}" data-f="${d.fid}" draggable=true title="Drag me into your DAW"><div class=tt><div class=tx>${esc(d.ext)}</div><div class=tn>${esc(d.name)}</div></div><div class=ti>${info}</div>
     <div class=tb><a href="${d.url}" download="${esc(d.name)}" data-dl="${d.fid}">${d.dl?'⬇ Again':'⬇ Download'}</a>${d.kind==='audio'?`<button data-play="${d.fid}">${dPlay&&dPlay.fid===d.fid?'■':'▶'}</button>`:''}</div></div>`;}
-function dropRender(){const box=$('#relay');box.hidden=false;box.dataset.round='drops';box.className='relay drops';document.querySelector('.go').classList.add('hasm');
+function dropRender(){const box=$('#relay');box.hidden=false;box.dataset.round='drops';box.className='relay drops';document.querySelector('.go').classList.add('hasm');bump('relay');
   const r=DROPS.length?Math.max(...DROPS.map(d=>d.round)):0,now=DROPS.filter(d=>d.round===r),old=DROPS.filter(d=>d.round!==r),ok=now.filter(d=>d.st==='ok');
   const head=(now.find(d=>d.head)||{}).head;
   box.innerHTML=`<div class=mh>${head?esc(head):`Supply drop ${r} · from your teacher`}</div>
@@ -405,6 +448,40 @@ function dropRender(){const box=$('#relay');box.hidden=false;box.dataset.round='
   box.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>{const d=DROPS.find(x=>x.fid===b.dataset.play);if(dPlay){dPlay.a.pause();const was=dPlay.fid;dPlay=null;if(was===d.fid){dropRender();return;}}
     const a=new Audio(d.url);a.onended=()=>{dPlay=null;dropRender();};a.play().catch(()=>{});dPlay={fid:d.fid,a};dropRender();});
   const all=$('#dall');if(all)all.onclick=async()=>{for(const d of ok){const a=document.createElement('a');a.href=d.url;a.download=d.name;document.body.appendChild(a);a.click();a.remove();d.dl=true;await new Promise(r=>setTimeout(r,350));}dropRender();};}
+// newest card first; finished ones last
+function arrange(){const cards=['take','mission','relay'].map(id=>$('#'+id)).filter(e=>e&&!e.hidden);
+  cards.sort((a,b)=>(a.classList.contains('stale')-b.classList.contains('stale'))||((+b.dataset.at||0)-(+a.dataset.at||0))).forEach((e,i)=>e.style.order=i+1);}
+function bump(id,stale){const e=$('#'+id);if(!e)return;e.dataset.at=Date.now();e.classList.toggle('stale',!!stale);arrange();}
+// ---------- Soundabout Roundabout hand-in: export the track (MP3 is fastest), drop it here; Control Room passes it on
+let take=null,takeAck=0,takeDrop=null;
+function takeShow(m){take=m;const box=$('#take');box.hidden=false;document.querySelector('.go').classList.add('hasm');bump('take');clearTimeout(takeAck);
+  box.innerHTML=`<div class=mh><span>Soundabout Roundabout · ${esc(m.label||'Hand in')}</span></div><h2>Hand in your track</h2>
+    <p class=lead>Export your track from the very start and drop it here.${m.next?` When your teacher passes it on, it goes to <b>${esc(m.next)}</b>.`:''}</p>
+    <div class=drop id=tdrop>Drop your track here, or click to choose a file</div>
+    <p class=tip2>Export as <b>MP3</b> (320 kbps): it arrives about five times faster than a WAV.</p>
+    ${m.project?'<div class=drop id=tproj>Also drop your <b>project</b> here (a .zip, e.g. Ableton’s Collect All and Save) so the next person can open it.</div>':''}`;
+  const d=$('#tdrop'),mb=n=>n>1e6?(n/1e6).toFixed(1)+' MB':Math.max(1,Math.round(n/1e3))+' KB';
+  const card=(cls,ico,line,sub,extra)=>{d.className='hand '+cls;d.innerHTML=`<div class=hi>${ico}</div><div class=hn>${line}</div><div class=hs>${sub}</div><div class=hm><i id=tdm></i></div>${extra?`<div class=hx>${extra}</div>`:''}`;};
+  const pick=(acc,fn)=>{const i=document.createElement('input');i.type='file';i.accept=acc;i.onchange=()=>fn(i.files[0]);i.click();};
+  const again=(label,fn)=>{const b=$('#tagain');if(b){b.textContent=label;b.onclick=e=>{e.stopPropagation();fn();};}};
+  const go=async f=>{if(!f||take!==m)return;clearTimeout(takeAck);
+    if(!/^audio\//.test(f.type)&&!/\.(wav|aif|aiff|mp3|flac|m4a|ogg)$/i.test(f.name)){card('bad','!',esc(f.name),'That isn’t an audio file. Export your track as <b>MP3</b> (or WAV).','<button id=tagain></button>');again('Choose another file',()=>pick('audio/*',go));return;}
+    if(f.size>90e6){card('bad','!',esc(f.name),'That file is over 90 MB. Export it as MP3.','<button id=tagain></button>');again('Choose another file',()=>pick('audio/*',go));return;}
+    m.sent=f.name;const ext=(f.name.match(/\.([a-z0-9]+)$/i)||[,'AUD'])[1].toUpperCase().slice(0,4);
+    card('sending',ext,esc(f.name),`<b>Sending to Control Room…</b> ${mb(f.size)} · <span id=tpct>0 %</span>${f.size>12e6&&!/\.mp3$/i.test(f.name)?' · next time try MP3, it’s much smaller':''}`);
+    const ok=await sendFile({kind:'take',round:m.round,name:f.name},f,x=>{const i=$('#tdm'),t=$('#tpct');if(i)i.style.width=Math.round(x*100)+'%';if(t)t.textContent=Math.round(x*100)+' %';});
+    if(take!==m)return;
+    if(!ok){card('bad','✕',esc(f.name),'<b>Not delivered.</b> This computer lost the connection to Control Room.','<button id=tagain></button>');again('Try again',()=>go(f));return;}
+    card('sending',ext,esc(f.name),'<b>Delivered.</b> Control Room is checking it…');const i=$('#tdm');if(i)i.style.width='100%';
+    takeAck=setTimeout(()=>{if(take!==m||m.sent!==f.name)return;card('bad','?',esc(f.name),'<b>No answer from Control Room.</b> Your teacher may not have it.','<button id=tagain></button>');again('Send it again',()=>go(f));},45000);};
+  d.onclick=()=>{if(!d.classList.contains('hand'))pick('audio/*,.mp3,.wav,.aif,.aiff',go);};d.ondragover=e=>{e.preventDefault();d.classList.add('over');};d.ondragleave=()=>d.classList.remove('over');
+  d.ondrop=e=>{e.preventDefault();e.stopPropagation();d.classList.remove('over');go(e.dataTransfer.files[0]);};
+  const pj=$('#tproj');if(pj){const pgo=async f=>{if(!f)return;pj.innerHTML=`Sending <b>${esc(f.name)}</b>… <div class=meter><i id=tpm></i></div>`;const ok=await sendFile({kind:'project',round:m.round,name:f.name},f,x=>{const i=$('#tpm');if(i)i.style.width=Math.round(x*100)+'%';});pj.innerHTML=ok?`Project <b>${esc(f.name)}</b> sent ✓`:'Could not send the project. Drop it again.';};
+    pj.onclick=()=>pick('.zip,application/zip',pgo);pj.ondragover=e=>{e.preventDefault();pj.classList.add('over');};pj.ondragleave=()=>pj.classList.remove('over');pj.ondrop=e=>{e.preventDefault();e.stopPropagation();pj.classList.remove('over');pgo(e.dataTransfer.files[0]);};}
+  takeDrop=go;}
+function takeGot(m){const d=$('#tdrop');if(!d||!take||m.round!==take.round)return;clearTimeout(takeAck);
+  d.className='hand ok';d.innerHTML=`<div class=hi>✓</div><div class=hn>Received by Control Room</div><div class=hs>${esc(take.sent||'Your track')}${m.dur?' · '+Math.floor(m.dur/60)+':'+String(Math.round(m.dur%60)).padStart(2,'0'):''}</div><div class=hx>Done. Wait for “Pass it on”. To change it, drop a new export anywhere on this page.</div>`;d.onclick=null;}
+function takeEnd(){take=null;takeDrop=null;const b=$('#take');if(b&&!b.hidden){bump('take',true);const d=$('#tdrop');if(d&&!d.classList.contains('ok'))d.outerHTML='<p class=over>Hand-in closed.</p>';}}
 function relayNote(m){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');box.dataset.round='';
   box.innerHTML=`<div class=mh>Stop ${(m.round||0)+1}</div><h2>${esc(m.text)}</h2>`;}
 

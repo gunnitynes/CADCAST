@@ -65,7 +65,32 @@
 .dropall{position:fixed;inset:0;z-index:70;display:grid;place-items:center;background:rgba(7,8,11,.88);border:6px dashed var(--live);font-size:clamp(30px,5vw,60px);font-weight:900;letter-spacing:-.03em;text-align:center;pointer-events:none}
 .dropall small{display:block;font-size:18px;font-weight:600;color:var(--dim);letter-spacing:0;margin-top:10px}
 .relay{width:min(520px,92vw);text-align:left;background:linear-gradient(180deg,#141821,#0f1218);border:1px solid var(--line);border-radius:22px;padding:22px 24px;display:grid;gap:12px;box-shadow:var(--shadow)}
-.relay .mh{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}.relay h2{margin:0;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em}
+.relay .mh{color:var(--dim);font-size:13px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+/* Supply Drop: every file the teacher sent, as tiles; the newest drop first, earlier drops kept below */
+.relay.drops{width:min(780px,94vw)}
+.dh{display:flex;align-items:end;justify-content:space-between;gap:14px;flex-wrap:wrap}.dh h2{margin:0}
+.dh .dn{color:var(--dim);font-size:14px;margin-top:4px}
+.dall{font-size:14px;padding:11px 16px;border-radius:12px;background:var(--live);color:var(--ink);font-weight:800;border:0;cursor:pointer}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px}
+.tile{position:relative;display:grid;grid-template-rows:auto 1fr auto;gap:8px;padding:14px;border-radius:16px;background:#0b0d12;border:1px solid var(--line);cursor:grab;transition:border-color .2s,transform .15s}
+.tile:hover{border-color:#3a4256;transform:translateY(-2px)}
+.tile .tt{display:flex;align-items:center;gap:10px}
+.tile .tx{width:46px;height:46px;flex:none;border-radius:12px;display:grid;place-items:center;font:900 12px ui-monospace,Menlo,monospace;background:var(--tc,var(--live));color:#0b0d12}
+.tile .tn{font-weight:800;font-size:15px;line-height:1.2;word-break:break-word;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile .ti{color:var(--dim);font-size:12px}
+.tile .tb{display:flex;gap:8px}
+.tile .tb a,.tile .tb button{flex:1;text-align:center;font-size:13px;font-weight:800;padding:9px 10px;border-radius:10px;text-decoration:none;border:0;cursor:pointer;background:var(--tc,var(--live));color:#0b0d12}
+.tile .tb button{flex:0 0 auto;background:#222736;color:var(--fg)}
+.tile.k-audio{--tc:#ff6b8b}.tile.k-midi{--tc:var(--live)}.tile.k-project{--tc:#6fa8ff}.tile.k-file{--tc:var(--wait)}
+.tile.dl{border-color:var(--live)}.tile.dl::after{content:'✓ Downloaded';position:absolute;top:10px;right:10px;font-size:11px;font-weight:800;color:var(--live);letter-spacing:.04em}
+.tile.dl .tb a{background:#18301f;color:var(--live)}
+.tile.arr{cursor:default;border-style:dashed}.tile.arr .tx{background:#222736;color:var(--dim);animation:hpulse 1s ease-in-out infinite}
+.tile.arr .tm{height:8px;border-radius:4px;background:#1b2130;overflow:hidden}.tile.arr .tm i{display:block;height:100%;width:0;background:var(--live);transition:width .2s}
+.tile.bad{border-color:var(--off);cursor:default}.tile.bad .tx{background:var(--off);color:#fff}
+.dold{margin-top:6px;color:var(--dim);font-size:12px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
+.tiles.old .tile{padding:10px;opacity:.85}.tiles.old .tile .tx{width:36px;height:36px;font-size:10px}
+.dhint{color:var(--dim);font-size:13px;margin:0}
+@keyframes hpulse{50%{opacity:.45}}.relay h2{margin:0;font-size:clamp(24px,2.6vw,32px);letter-spacing:-.02em}
 </style></head><body>
 <div class="go plug">
   <div class=brand><div class=logo>__ICON__</div><div class=stname>CADCAST</div></div>
@@ -151,6 +176,7 @@ async function startPeer(){await iceReady();if(peer&&!peer.destroyed)peer.destro
     if(hostC!==c){hostC=c;c.on('error',()=>{c.bad=true;});c.on('close',()=>{c.bad=true;});}
     if(m.t==='rec-start')return recStart(m);
     if(m.t==='rec-stop')return recStop();
+    if(m.t==='ping')return toHost({t:'pong',k:m.k});
     if(m.t==='file')return gotChunk(m);
     if(m.t==='relay-note')return relayNote(m);
     if(m.t==='mission'&&m.m)return showMission(m.m);
@@ -323,11 +349,12 @@ try{const m=JSON.parse(localStorage.cc_album||'null');if(m&&Date.now()-(m.at||0)
 const IN=new Map();let relayURLs=[];
 function gotChunk(m){if(!(Number.isInteger(m.n)&&m.n>0&&m.n<=32000&&Number.isInteger(m.i)&&m.i>=0&&m.i<m.n&&typeof m.data==='string'&&m.data.length<16000))return;
   let f=IN.get(m.fid);if(!f){for(const [k,v] of IN)if(Date.now()-v.at>600000)IN.delete(k);if(IN.size>=6)return;IN.set(m.fid,f={parts:[],got:0,n:m.n,meta:null,at:0});}f.at=Date.now();if(m.meta)f.meta=m.meta;if(!f.parts[m.i]){f.parts[m.i]=UNB64(m.data);f.got++;}
-  if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm'),t=$('#relp');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';if(t)t.textContent=Math.round(100*f.got/f.n)+' %';}
+  if(f.meta&&f.meta.kind==='drop'){dropArriving(m.fid,f.meta,f.got/f.n);}
+  else if(f.meta&&f.got===1)relayBox(f.meta,null,f);else if(f.meta){const p=$('#relm'),t=$('#relp');if(p)p.style.width=Math.round(100*f.got/f.n)+'%';if(t)t.textContent=Math.round(100*f.got/f.n)+' %';}
   // nothing more for 20 s: say so instead of sitting on "Arriving…" forever
-  clearTimeout(f.dog);if(f.got<f.n)f.dog=setTimeout(()=>{if(IN.get(m.fid)!==f)return;IN.delete(m.fid);const a=$('#relarr');if(a)a.innerHTML=`<div class=ico style="background:var(--off);color:#fff">!</div><b>${esc((f.meta||{}).name||'A file')} didn’t arrive completely</b><span>The connection dropped. Ask your teacher to send it again.</span>`;},20000);
-  if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}));}}
-function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');
+  clearTimeout(f.dog);if(f.got<f.n)f.dog=setTimeout(()=>{if(IN.get(m.fid)!==f)return;IN.delete(m.fid);if(f.meta&&f.meta.kind==='drop'){dropStalled(m.fid);return;}const a=$('#relarr');if(a)a.innerHTML=`<div class=ico style="background:var(--off);color:#fff">!</div><b>${esc((f.meta||{}).name||'A file')} didn’t arrive completely</b><span>The connection dropped. Ask your teacher to send it again.</span>`;},20000);
+  if(f.got===f.n&&f.meta){IN.delete(m.fid);relayFile(f.meta,new Blob(f.parts,{type:f.meta.mime||''}),m.fid);toHost({t:'file-ok',fid:m.fid,kind:f.meta.kind,round:f.meta.round,name:f.meta.name});/* the receipt: Control Room ticks it only now */}}
+function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;if(box.dataset.round==='drops'){box.className='relay';box.dataset.round='';}document.querySelector('.go').classList.add('hasm');
   const head=meta.kind==='album'?`<div class=mh>The Class Album · from your class</div><h2>${esc(meta.title||'Our song')}</h2>`:meta.kind==='drop'?`<div class=mh>${meta.head?esc(meta.head):`Supply drop ${meta.round} · from your teacher`}</div><h2>${esc(meta.title||'Your material')}</h2>`:`<div class=mh>Stop ${meta.round+1} · from ${esc(meta.from||'')}</div><h2>${meta.kind==='project'?'Their project':'The track you grow next'}</h2>`;
   if(!file){if(meta.kind==='drop'&&box.dataset.round==='d'+meta.round||meta.kind==='album'&&box.dataset.round==='a'+meta.round)return;box.innerHTML=head+`<div class=file id=relarr><div class=ico>…</div><b>Arriving: ${esc(meta.name||'a file')}</b><span><span id=relp>0 %</span><div class=meter style="height:8px;background:#1b2130;border-radius:4px"><i id=relm style="display:block;height:100%;width:0;background:var(--live)"></i></div></span></div>`;return;}
   relayURLs.push(file.url);const el=document.createElement('div');el.className='file';el.draggable=true;
@@ -335,10 +362,10 @@ function relayBox(meta,file,f){const box=$('#relay');box.hidden=false;document.q
   el.innerHTML=`<div class="ico ${file.wav?'wav':''}">${file.tag||(file.wav?'WAV':'ZIP')}</div><b>${esc(file.name)}</b><span>${esc(file.info)}</span><div class=acts><a href="${file.url}" download="${esc(file.name)}">⬇ Download</a></div>`;
   const rk=(meta.kind==='drop'?'d':meta.kind==='album'?'a':'')+meta.round;if(box.dataset.round!==rk){box.dataset.round=rk;box.innerHTML=head;}else{const a=box.querySelector('.file:not([draggable])');if(a)a.remove();}
   const hint=box.querySelector('.hint');if(hint)box.insertBefore(el,hint);else box.appendChild(el);if(!box.querySelector('.hint'))box.insertAdjacentHTML('beforeend',`<p class=hint>Drag it into your DAW, or download it.${meta.kind==='drop'||meta.kind==='album'?'':' Your card is on your phone.'}</p>`);}
-async function relayFile(meta,blob){
+async function relayFile(meta,blob,fid){
   if(meta.kind==='album'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||'The Class Album.wav',mime:blob.type||'audio/wav',info:(blob.size/1e6).toFixed(1)+' MB · '+(meta.what||'the class mix'),wav:true,tag:'WAV'});return;}
-  if(meta.kind==='drop'){const ext=(String(meta.name||'').match(/\.([a-z0-9]+)$/i)||[,'file'])[1].toUpperCase().slice(0,4),aud=/^(WAV|MP3|AIF|AIFF|FLAC|M4A|OGG)$/.test(ext);
-    relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||'material',mime:blob.type||'application/octet-stream',info:(blob.size>1e6?(blob.size/1e6).toFixed(1)+' MB':Math.max(1,Math.round(blob.size/1e3))+' KB')+(meta.label?' · '+meta.label:''),wav:aud,tag:ext});return;}const base=`Stop ${meta.round+1} from ${String(meta.from||'someone').replace(/[\\/:*?"<>|]/g,'')}`;
+  if(meta.kind==='drop')return dropGot(fid,meta,blob);
+  const base=`Stop ${meta.round+1} from ${String(meta.from||'someone').replace(/[\\/:*?"<>|]/g,'')}`;
   if(meta.kind==='project'){relayBox(meta,{url:URL.createObjectURL(blob),name:meta.name||base+'.zip',mime:blob.type||'application/zip',info:Math.round(blob.size/1e6)+' MB project',wav:false});return;}
   try{ac=ac||new (window.AudioContext||window.webkitAudioContext)();const buf=await ac.decodeAudioData(await blob.arrayBuffer());
     const wav=wavOf(buf);relayBox(meta,{url:URL.createObjectURL(wav),name:base+'.wav',mime:'audio/wav',info:Math.round(buf.duration)+' s · WAV',wav:true});}
@@ -348,6 +375,36 @@ function wavOf(b){const ch=Math.min(2,b.numberOfChannels),n=b.length,sr=b.sample
   S('RIFF');U32(36+n*ch*2);S('WAVE');S('fmt ');U32(16);U16(1);U16(ch);U32(sr);U32(sr*ch*2);U16(ch*2);U16(16);S('data');U32(n*ch*2);
   const d=[...Array(ch)].map((_,c)=>b.getChannelData(c));for(let i=0;i<n;i++)for(let c=0;c<ch;c++){const x=Math.max(-1,Math.min(1,d[c][i]));v.setInt16(o,x<0?x*32768:x*32767,true);o+=2;}
   return new Blob([v],{type:'audio/wav'});}
+// ---------- Supply Drop: the files, kept for the whole session (newest drop first), each one a tile you can drag
+// straight into the DAW or download; downloaded ones are ticked. Arriving files show as tiles with their progress.
+const DROPS=[];   // {fid, round, name, label, kind, ext, size, url, mime, dl, st:'arr'|'ok'|'bad', pct}
+const dKind=n=>{const e=(String(n).match(/\.([a-z0-9]+)$/i)||[,''])[1].toUpperCase();return {ext:e.slice(0,4)||'FILE',kind:/^(WAV|MP3|AIF|AIFF|FLAC|M4A|OGG)$/.test(e)?'audio':/^(MID|MIDI)$/.test(e)?'midi':/^(ZIP|ALS|LOGICX|FLP|RPP|PTX)$/.test(e)?'project':'file'};};
+const dSize=b=>b>1e6?(b/1e6).toFixed(1)+' MB':Math.max(1,Math.round(b/1e3))+' KB';
+let dPlay=null;
+function dropArriving(fid,meta,pct){let d=DROPS.find(x=>x.fid===fid);
+  if(!d){d={fid,round:meta.round||0,name:meta.name||'material',label:meta.label||'',head:meta.head||'',size:meta.size||0,...dKind(meta.name),st:'arr',pct:0};DROPS.unshift(d);dropRender();return;}
+  d.pct=pct;const t=document.querySelector(`.tile[data-f="${fid}"]`);if(t){const i=t.querySelector('.tm i'),p=t.querySelector('.tp');if(i)i.style.width=Math.round(pct*100)+'%';if(p)p.textContent=Math.round(pct*100)+' %';}}
+function dropStalled(fid){const d=DROPS.find(x=>x.fid===fid);if(d){d.st='bad';dropRender();}}
+function dropGot(fid,meta,blob){let d=DROPS.find(x=>x.fid===fid);if(!d){dropArriving(fid,meta,1);d=DROPS.find(x=>x.fid===fid);}
+  Object.assign(d,{st:'ok',size:blob.size,mime:blob.type||meta.mime||'application/octet-stream',url:URL.createObjectURL(blob)});relayURLs.push(d.url);dropRender();}
+function dropTile(d){const info=`${d.size?dSize(d.size):''}${d.label?' · '+esc(d.label):''}`;
+  if(d.st==='arr')return `<div class="tile arr k-${d.kind}" data-f="${d.fid}"><div class=tt><div class=tx>${esc(d.ext)}</div><div class=tn>${esc(d.name)}</div></div><div class=ti>Arriving… <span class=tp>${Math.round(d.pct*100)} %</span></div><div class=tm><i style="width:${Math.round(d.pct*100)}%"></i></div></div>`;
+  if(d.st==='bad')return `<div class="tile bad" data-f="${d.fid}"><div class=tt><div class=tx>!</div><div class=tn>${esc(d.name)}</div></div><div class=ti>Didn’t arrive completely. Ask your teacher to drop again.</div></div>`;
+  return `<div class="tile k-${d.kind}${d.dl?' dl':''}" data-f="${d.fid}" draggable=true title="Drag me into your DAW"><div class=tt><div class=tx>${esc(d.ext)}</div><div class=tn>${esc(d.name)}</div></div><div class=ti>${info}</div>
+    <div class=tb><a href="${d.url}" download="${esc(d.name)}" data-dl="${d.fid}">${d.dl?'⬇ Again':'⬇ Download'}</a>${d.kind==='audio'?`<button data-play="${d.fid}">${dPlay&&dPlay.fid===d.fid?'■':'▶'}</button>`:''}</div></div>`;}
+function dropRender(){const box=$('#relay');box.hidden=false;box.dataset.round='drops';box.className='relay drops';document.querySelector('.go').classList.add('hasm');
+  const r=DROPS.length?Math.max(...DROPS.map(d=>d.round)):0,now=DROPS.filter(d=>d.round===r),old=DROPS.filter(d=>d.round!==r),ok=now.filter(d=>d.st==='ok');
+  const head=(now.find(d=>d.head)||{}).head;
+  box.innerHTML=`<div class=mh>${head?esc(head):`Supply drop ${r} · from your teacher`}</div>
+    <div class=dh><div><h2>Your material</h2><div class=dn>${now.length} file${now.length===1?'':'s'}${now.some(d=>d.st==='arr')?' · arriving…':''}</div></div>${ok.length>1?`<button class=dall id=dall>⬇ Download all ${ok.length}</button>`:''}</div>
+    <div class=tiles>${now.map(dropTile).join('')}</div>
+    <p class=dhint>Drag a tile straight into your DAW, or download it.</p>
+    ${old.length?`<div class=dold>Earlier drops</div><div class="tiles old">${old.map(dropTile).join('')}</div>`:''}`;
+  box.querySelectorAll('.tile[draggable]').forEach(t=>{const d=DROPS.find(x=>x.fid===t.dataset.f);t.ondragstart=e=>{e.dataTransfer.setData('DownloadURL',`${d.mime}:${d.name}:${d.url}`);e.dataTransfer.effectAllowed='copy';};t.ondragend=()=>{d.dl=true;dropRender();};});
+  box.querySelectorAll('[data-dl]').forEach(a=>a.onclick=()=>{const d=DROPS.find(x=>x.fid===a.dataset.dl);if(d){d.dl=true;setTimeout(dropRender,300);}});
+  box.querySelectorAll('[data-play]').forEach(b=>b.onclick=()=>{const d=DROPS.find(x=>x.fid===b.dataset.play);if(dPlay){dPlay.a.pause();const was=dPlay.fid;dPlay=null;if(was===d.fid){dropRender();return;}}
+    const a=new Audio(d.url);a.onended=()=>{dPlay=null;dropRender();};a.play().catch(()=>{});dPlay={fid:d.fid,a};dropRender();});
+  const all=$('#dall');if(all)all.onclick=async()=>{for(const d of ok){const a=document.createElement('a');a.href=d.url;a.download=d.name;document.body.appendChild(a);a.click();a.remove();d.dl=true;await new Promise(r=>setTimeout(r,350));}dropRender();};}
 function relayNote(m){const box=$('#relay');box.hidden=false;document.querySelector('.go').classList.add('hasm');box.dataset.round='';
   box.innerHTML=`<div class=mh>Stop ${(m.round||0)+1}</div><h2>${esc(m.text)}</h2>`;}
 

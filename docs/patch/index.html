@@ -23,7 +23,7 @@ h1,h2,p{margin:0}
 
 /* header: the Control Room top bar */
 .top{display:grid;grid-template-columns:auto auto auto minmax(0,1fr) auto;align-items:stretch;border-bottom:3px solid var(--ink);background:var(--paper);position:sticky;top:0;z-index:5}
-.top>*{display:flex;align-items:center;padding:0 18px;min-height:64px}
+.top>*{display:flex;align-items:center;padding:0 18px;min-height:67px}   /* + the 3 px rule = 70 px, the same as Control Room's header */
 .crlogo{display:grid;align-content:center;gap:0;padding:0 18px;border-right:3px solid var(--ink);text-decoration:none;cursor:pointer;background:var(--paper)}
 .crlogo b{font:900 26px/.8 var(--disp);font-stretch:62%;text-transform:uppercase;letter-spacing:.005em;color:var(--ink)}.crlogo b+b{color:var(--red);margin-top:2px}
 .crlogo:hover b:first-child{color:var(--red)}.crlogo:hover b+b{color:var(--ink)}
